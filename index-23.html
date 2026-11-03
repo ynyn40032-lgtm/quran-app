@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>نتائج فصلي</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  *{ box-sizing:border-box; }
+  :root{ --navy:#0F2440; --gold:#C7963E; --cream:#FBF8F0; --line:#EAE1C7; --muted:#7C8A7E; --ok:#0F5132; --okbg:#DDF0E3; --bad:#A3312B; --badbg:#F6DCDA; }
+  html,body{ margin:0; min-height:100%; }
+  body{ background:var(--cream); color:var(--navy); font-family:'Cairo','Tajawal',system-ui,sans-serif; padding-bottom:env(safe-area-inset-bottom,0); }
+  header{ background:linear-gradient(160deg,#0F2440,#1E3F66); color:#F4EFDC; padding:calc(14px + env(safe-area-inset-top,0)) 16px 14px; border-bottom:3px solid var(--gold); display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  header h1{ margin:0; font-size:20px; }
+  header small{ display:block; font-size:12px; opacity:.8; direction:ltr; text-align:right; }
+  #logoutBtn{ background:rgba(255,255,255,.15); color:#fff; border:0; border-radius:999px; padding:8px 14px; font:inherit; font-size:13px; cursor:pointer; }
+  main{ max-width:720px; margin:0 auto; padding:14px; }
+  #login{ position:fixed; inset:0; z-index:10; background:linear-gradient(160deg,#0F2440,#1E3F66); display:flex; align-items:center; justify-content:center; padding:20px; }
+  #login .box{ width:100%; max-width:360px; background:var(--cream); border-radius:20px; border-top:4px solid var(--gold); padding:24px 20px; text-align:center; }
+  #login h2{ margin:0 0 4px; }
+  #login p{ margin:0 0 16px; color:var(--muted); font-size:14px; }
+  input{ width:100%; padding:12px; margin-bottom:10px; border:1.5px solid var(--line); border-radius:10px; font:inherit; font-size:16px; background:#fff; }
+  .primary{ width:100%; padding:13px; background:var(--navy); color:#F4EFDC; border:0; border-radius:10px; font:inherit; font-size:16px; font-weight:700; cursor:pointer; }
+  .primary:disabled{ opacity:.6; }
+  #loginMsg{ color:var(--bad); font-size:14px; min-height:20px; margin-top:10px; }
+  #forgot{ color:#9C6F22; font-size:13px; }
+  .chips{ display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; margin-bottom:10px; }
+  .chip{ flex:0 0 auto; border:1.5px solid var(--line); background:#fff; color:var(--navy); border-radius:999px; padding:7px 14px; font:inherit; font-size:14px; cursor:pointer; white-space:nowrap; }
+  .chip.on{ background:var(--navy); color:#F4EFDC; border-color:var(--navy); }
+  .sum{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+  .sum div{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 4px; text-align:center; font-size:13px; color:var(--muted); }
+  .sum b{ display:block; font-size:22px; color:var(--navy); }
+  .sum .g b{ color:var(--ok); } .sum .r b{ color:var(--bad); }
+  .cls{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:12px; }
+  .cls h3{ margin:0 0 6px; display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; font-size:17px; }
+  .cls h3 span{ font-size:13px; font-weight:600; }
+  .row{ display:flex; justify-content:space-between; align-items:center; gap:8px; padding:9px 0; border-top:1px solid var(--line); }
+  .row .meta{ font-size:12px; color:var(--muted); margin-top:2px; line-height:1.6; }
+  .row .note{ font-size:12.5px; margin-top:3px; background:#FFF8E6; border-radius:8px; padding:4px 8px; }
+  .badge{ display:inline-block; border-radius:999px; padding:2px 10px; font-weight:700; font-size:13px; white-space:nowrap; }
+  .badge.ok{ background:var(--okbg); color:var(--ok); } .badge.bad{ background:var(--badbg); color:var(--bad); }
+  .score{ text-align:left; font-size:12px; color:var(--muted); }
+  .new{ display:inline-block; background:var(--bad); color:#fff; border-radius:999px; font-size:11px; padding:0 7px; margin-inline-start:6px; }
+  .empty{ text-align:center; color:var(--muted); padding:40px 10px; line-height:1.9; }
+  header{ padding-left:110px; }
+  .row{ flex-wrap:wrap; }
+  .dt{ flex:1 1 100%; margin-top:2px; }
+  .dt > summary{ cursor:pointer; list-style:none; display:inline-block; font-size:13px; font-weight:700; color:var(--navy); background:#F4EFDC; border-radius:999px; padding:3px 12px; }
+  .dt > summary::-webkit-details-marker{ display:none; }
+  .dt[open] > summary{ background:var(--navy); color:#F4EFDC; }
+  .dt .qq{ border-top:1px dashed var(--line); padding:7px 2px; font-size:13px; line-height:1.9; }
+  .dt .qq:first-of-type{ border-top:0; }
+  .dt .er{ margin:2px 0 0; padding-inline-start:4px; }
+  .dt .wd{ font-family:'UthmanicHafs','Amiri Quran','Amiri',serif; font-size:19px; color:#0F2440; }
+  .dt .sd{ font-family:'UthmanicHafs','Amiri Quran','Amiri',serif; font-size:19px; color:var(--bad); }
+  .dt .ty{ display:inline-block; background:#F6EBD0; border:1px solid #C7963E; border-radius:8px; padding:0 7px; font-size:12px; font-weight:700; color:#5B3F0C; }
+  .dt .pb{ background:#FFF3F1; border-right:4px solid var(--bad); border-radius:6px; padding:4px 9px; margin:5px 0; font-size:13px; }
+  .dt .none{ font-size:12.5px; color:var(--muted); padding:4px 2px; }
+  .lv{ display:inline-block; border-radius:999px; padding:1px 10px; font-size:12px; font-weight:800; color:#fff; margin-inline-start:6px; }
+  .lv.g{ background:#2E6B4A; } .lv.m{ background:#B8860B; } .lv.w{ background:#A3312B; }
+  .csum{ background:#F4EFDC; border-radius:10px; padding:7px 11px; font-size:13px; line-height:1.9; margin:4px 0 6px; }
+.sec{ margin:14px 0 4px; padding:7px 12px; border-radius:10px; background:#0F2440; color:#fff; font-weight:800; font-size:14px; display:flex; justify-content:space-between; gap:8px; } .sec span{ font-weight:600; font-size:12.5px; opacity:.9; }
+  #shareBtn{ background:#C7963E; color:#0F2440; border:0; border-radius:999px; padding:8px 14px; font:inherit; font-size:13px; font-weight:800; cursor:pointer; }
+  #shareBtn:disabled{ opacity:.6; }
+  .hbtns{ display:flex; gap:8px; align-items:center; }
+  #shotBox{ position:absolute; top:0; left:0; width:430px; z-index:-1; background:#FBF8F0; pointer-events:none; }
+  #shotBox header{ padding-left:16px !important; }
+  #shotBox .cls{ margin-bottom:12px; }
+</style>
+</head>
+<body>
+<div id="login">
+  <div class="box">
+    <div style="font-size:14px;color:#8A4B1E;font-weight:800;margin-bottom:6px">✦ مركز الأمين الثقافي التربوي ✦<div style="font-size:12px;font-weight:700">لتحفيظ القرآن الكريم</div></div><h2>📖 نتائج فصلي</h2>
+    <p>ادخلي بإيميلك لتشوفي اختبارات فصولك</p>
+    <input id="em" type="email" dir="ltr" placeholder="الإيميل" autocomplete="username">
+    <input id="pw" type="password" dir="ltr" placeholder="كلمة السر" autocomplete="current-password">
+    <button id="loginBtn" class="primary" type="button">دخول</button>
+    <div id="loginMsg"></div>
+    <a id="forgot" href="#">نسيت كلمة السر؟</a>
+  </div>
+</div>
+
+<header>
+  <div><div style="font-size:12px;color:#E8C46B;font-weight:800;margin-bottom:2px">✦ مركز الأمين الثقافي التربوي ✦<div style="font-size:11px;font-weight:700;opacity:.9">لتحفيظ القرآن الكريم</div></div><h1>📖 نتائج فصلي</h1><small id="who"></small></div>
+  <div class="hbtns"><button id="shareBtn" type="button">📤 مشاركة</button><button id="logoutBtn" type="button">خروج</button></div>
+</header>
+
+<main>
+  <div id="chips" class="chips"></div>
+  <div id="sum" class="sum"></div>
+  <div id="list"></div>
+</main>
+
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAjr3fKiGeWU2KOftf52eGogRD2OHq5mpo",
+  authDomain: "quran-tests-645cd.firebaseapp.com",
+  projectId: "quran-tests-645cd",
+  storageBucket: "quran-tests-645cd.firebasestorage.app",
+  messagingSenderId: "946216956918",
+  appId: "1:946216956918:web:1946eb27cff9772dae8dd7"
+};
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const SEEN_KEY = 'teacher:seen';
+let seen = {}, results = [], filter = 'all', first = true, unsub = null;
+try{ seen = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}') || {}; }catch(e){}
+
+function authErr(e){
+  const c = (e && e.code) || '';
+  if(/invalid-credential|wrong-password|user-not-found|invalid-email/.test(c)) return 'الإيميل أو كلمة السر غير صحيحة';
+  if(/too-many/.test(c)) return 'محاولات كتير، استني شوية وجرّبي تاني';
+  if(/network/.test(c)) return 'مفيش اتصال بالنت';
+  return 'حصلت مشكلة، جرّبي تاني';
+}
+
+
+// منع تكرار نفس الاختبار: لو نفس الطالب/التاريخ/الفصل/نوع الاختبار/الدرجة اتبعت أكتر من مرة (من جهازين أو حسابين) بنعرضه مرة واحدة
+const nrm = t => String(t == null ? '' : t).replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim().toLowerCase();
+function canonClasses(list){
+  const strip = c => nrm(c).replace(/^فصل\s+/, ''), isF = c => /^\s*فصل\s/.test(c || ''), pref = {};
+  list.forEach(r => { const k = strip(r.className || ''); if(!k) return; const cur = pref[k]; if(!cur || (isF(r.className) && !isF(cur))) pref[k] = r.className; });
+  list.forEach(r => { const k = strip(r.className || ''); if(pref[k]) r.className = pref[k]; });
+  return list;
+}
+function dedupe(list){
+  const m = new Map();
+  list.forEach(r => {
+    const k = r.app === 'surah'
+      ? [nrm(r.student), r.date || '', 'surah', r.grade].join('|')
+      : [nrm(r.student), r.date || '', nrm(r.className), r.app || '', nrm(r.testType), r.grade, r.hizb == null ? '' : r.hizb, r.rub || ''].join('|');
+    const cur = m.get(k);
+    if(!cur || (r.ts || 0) > (cur.ts || 0)) m.set(k, r);
+  });
+  window.__dups = list.length - m.size;
+  return Array.from(m.values());
+}
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth = firebase.auth(), db = firebase.firestore();
+
+$('loginBtn').onclick = async () => {
+  const em = $('em').value.trim(), pw = $('pw').value;
+  if(!em || !pw){ $('loginMsg').textContent = 'اكتبي الإيميل وكلمة السر'; return; }
+  $('loginBtn').disabled = true; $('loginMsg').textContent = 'جاري الدخول...';
+  try{ await auth.signInWithEmailAndPassword(em, pw); $('loginMsg').textContent = ''; }
+  catch(e){ $('loginMsg').textContent = authErr(e); }
+  $('loginBtn').disabled = false;
+};
+$('forgot').onclick = async ev => {
+  ev.preventDefault();
+  const em = $('em').value.trim();
+  if(!em){ $('loginMsg').textContent = 'اكتبي الإيميل الأول'; return; }
+  try{ await auth.sendPasswordResetEmail(em); $('loginMsg').textContent = 'اتبعتلك رابط تغيير كلمة السر على الإيميل'; }
+  catch(e){ $('loginMsg').textContent = authErr(e); }
+};
+$('logoutBtn').onclick = async () => { await auth.signOut(); location.reload(); };
+
+auth.onAuthStateChanged(u => {
+  if(unsub){ unsub(); unsub = null; }
+  if(!u){ $('login').style.display = 'flex'; return; }
+  $('login').style.display = 'none';
+  $('who').textContent = u.email || '';
+  // كل معلمة بتشوف بس النتايج اللي ownerEmail بتاعها = إيميلها
+  unsub = db.collection('classResults')
+    .where('ownerEmail', '==', String(u.email || '').toLowerCase())
+    .onSnapshot(snap => {
+      const list = []; snap.forEach(d => { const x = d.data(); x.id = d.id; list.push(x); });
+      results = dedupe(canonClasses(list));
+      render();
+      if(first){ first = false; }
+    }, err => {
+      $('list').innerHTML = '<div class="empty">⚠️ ماقدرتش أحمّل النتايج.<br>' +
+        (err && err.code === 'permission-denied' ? 'الصلاحيات في قاعدة البيانات مش مفعّلة للمعلمات بعد (اتأكدي من قواعد Firestore).' : 'اتأكدي من النت وجرّبي تاني.') + '</div>';
+    });
+});
+
+
+const TYPE_LABELS = {tsf:'تشكيل: فتحة', tsk:'تشكيل: كسرة', tsd:'تشكيل: ضمة', tss:'تشكيل: سكون', prn:'نطق كلمة غلط', hes:'تردد', fgt:'نسيان كلمة', swW:'تبديل: كلمة مكان كلمة', swA:'تبديل: آية مكان آية', tsh:'تشكيل', swp:'تبديل كلمة'};
+const tl = t => TYPE_LABELS[t] || (t ? String(t) : 'نوع غير محدد');
+const AD = n => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+function pctOf(r){ const g = parseFloat(r.grade); if(isNaN(g) || r.grade === '' || r.grade == null) return null; return g / (r.app === 'surah' ? 10 : 100) * 100; }
+function lvlOf(p){ return p === null ? null : (p >= 95 ? {k:'g', t:'شاطر'} : {k:'w', t:'ضعيف'}); }
+function fixSaid(s){
+  s = String(s || ''); var out = [], cur = '';
+  var flush = function(){ if(!cur) return; var hasV = /[\u064B-\u0650\u08F0-\u08F2]/.test(cur); out.push(hasV ? cur.replace(/[\u0652\u06E1]/g, '') : cur); cur = ''; };
+  Array.from(s).forEach(function(ch){ if(/\p{M}/u.test(ch) && cur) cur += ch; else { flush(); cur = ch; } });
+  flush(); return out.join('');
+}
+function errsOf(r){
+  const out = [];
+  (Array.isArray(r.questions) ? r.questions : []).forEach(q => {
+    String(q.words || '').split(/\s*،\s*/).filter(Boolean).forEach((it, k) => {
+      const m = it.match(/^(.*?)\s*\(آية\s*([^)]*)\)\s*$/);
+      out.push({surah: q.surah || '', word: m ? m[1] : it, ayah: m ? m[2] : '', type: (q.wordTypes || [])[k] || '', said: fixSaid((q.wordSaid || [])[k] || '')});
+    });
+  });
+  return out;
+}
+function topN(map, n){ return Object.keys(map).map(k => [k, map[k]]).sort((a, b) => b[1] - a[1]).slice(0, n); }
+function detailHtml(r){
+  if(!Array.isArray(r.questions) || !r.questions.length){
+    return (r.mistakes > 0) ? '<div class="dt"><div class="none">تفاصيل الأخطاء بالكلمات هتظهر هنا بعد ما المختبِرة تفتح برنامج الاختبارات وتتزامن النتايج.</div></div>' : '';
+  }
+  const p = pctOf(r), lv = lvlOf(p), errs = errsOf(r);
+  const tcount = {}; errs.forEach(e => { const l = tl(e.type); tcount[l] = (tcount[l] || 0) + 1; });
+  let h = '<details class="dt"' + ' open' + '><summary>🔍 تفاصيل الاختبار والأخطاء</summary>';
+  h += '<div style="margin:6px 0 2px;font-size:13px">' + (lv ? 'المستوى:<span class="lv ' + lv.k + '">' + lv.t + '</span> ' : '') + (p !== null ? '<span style="color:var(--muted)">(' + AD(Math.round(p)) + '٪)</span>' : '') + '</div>';
+  if(errs.length){
+    h += '<div class="pb">⚠️ ' + (r.gender === 'f' || r.gender === 'أنثى' || r.gender === 'بنت' ? 'غالب أخطائها: ' : 'غالب أخطائه: ') + topN(tcount, 3).map(x => esc(x[0]) + ' (' + AD(x[1]) + ')').join('، ') + '</div>';
+  }
+  r.questions.forEach(q => {
+    const items = String(q.words || '').split(/\s*،\s*/).filter(Boolean);
+    h += '<div class="qq"><b>' + esc(q.surah) + '</b>' + (q.ayahRange ? ' <span style="color:var(--muted)">(آيات ' + esc(q.ayahRange) + ')</span>' : '') + ' — ' + (q.mistakes ? 'أخطاء: <b>' + AD(q.mistakes) + '</b>' : '<span style="color:var(--ok)">بدون أخطاء ✨</span>');
+    if(items.length){
+      h += '<div class="er">' + items.map((it, k) => {
+        const m = it.match(/^(.*?)\s*\((آية\s*[^)]*)\)\s*$/), t = (q.wordTypes || [])[k] || '', s = fixSaid((q.wordSaid || [])[k] || '');
+        return '• <span class="wd">' + esc(m ? m[1] : it) + '</span>' + (m ? ' <span style="color:var(--muted);font-size:12px">(' + esc(m[2]) + ')</span>' : '') + (t ? ' <span class="ty">' + esc(tl(t)) + '</span>' : '') + (s ? ' ← قالها «<span class="sd">' + esc(s) + '</span>»' : '');
+      }).join('<br>') + '</div>';
+    }
+    h += '</div>';
+  });
+  if(r.notes) h += '<div class="note" style="margin-top:4px">📝 ' + esc(r.notes) + '</div>';
+  return h + '</details>';
+}
+function classSummary(rows){
+  const ps = rows.map(pctOf).filter(p => p !== null), c = {g: 0, m: 0, w: 0};
+  ps.forEach(p => { c[lvlOf(p).k]++; });
+  const tcount = {}; rows.forEach(r => errsOf(r).forEach(e => { const l = tl(e.type); tcount[l] = (tcount[l] || 0) + 1; }));
+  const t = topN(tcount, 3);
+  if(!ps.length && !t.length) return '';
+  return '<div class="csum">' + (ps.length ? 'متوسط الفصل: <b>' + AD(Math.round(ps.reduce((a, b) => a + b, 0) / ps.length)) + '٪</b> · <span class="lv g">شاطر ' + AD(c.g) + '</span><span class="lv w">ضعيف ' + AD(c.w) + '</span>' : '') +
+    (t.length ? '<br>أكتر أنواع الأخطاء: <b>' + t.map(x => esc(x[0]) + ' (' + AD(x[1]) + ')').join('، ') + '</b>' : '') + '</div>';
+}
+
+function render(){
+  const classes = [...new Set(results.map(r => r.className).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
+  if(filter !== 'all' && !classes.includes(filter)) filter = 'all';
+
+  $('chips').innerHTML = classes.length > 1
+    ? ['all'].concat(classes).map(c => `<button type="button" class="chip ${c === filter ? 'on' : ''}" data-c="${esc(c)}">${c === 'all' ? 'كل فصولي' : esc(c)}</button>`).join('')
+    : '';
+
+  const shown = results.filter(r => filter === 'all' || r.className === filter);
+  const ok = shown.filter(r => r.status === 'ناجح').length;
+  $('sum').innerHTML = shown.length
+    ? `<div><b>${shown.length}</b>اختبار</div><div class="g"><b>${ok}</b>ناجح</div><div class="r"><b>${shown.length - ok}</b>راسب</div>`
+    : '';
+  if(shown.length && window.__dups > 0) $('sum').insertAdjacentHTML('beforeend', '<div style="grid-column:1/-1;background:none;border:0;padding:0;font-size:12px">تم إخفاء ' + window.__dups + ' نتيجة مكررة</div>');
+
+  if(!shown.length){
+    $('list').innerHTML = '<div class="empty">📭 مفيش اختبارات لفصولك لسه.<br>أول ما يتسجل اختبار لفصلك هيظهر هنا تلقائيًا.</div>';
+    return;
+  }
+  const rowHtml = r => {
+        const pass = r.status === 'ناجح';
+        const label = r.gender === 'f' || r.gender === 'أنثى' || r.gender === 'بنت' ? (pass ? 'ناجحة' : 'راسبة') : (pass ? 'ناجح' : 'راسب');
+        const isNew = !seen[r.id];
+        const sq = (r.app === 'surah' && Array.isArray(r.questions)) ? r.questions.filter(q => q && q.surah) : [];
+        const where = r.app === 'surah'
+          ? (sq.length ? sq.map(q => 'سورة ' + q.surah + (q.ayahRange ? ' (آيات ' + q.ayahRange + ')' : '')).join('، ') : 'سورة جديدة')
+          : (r.testType || '');
+        const part = [r.hizb !== '' && r.hizb != null ? 'حزب ' + r.hizb : '', r.rub ? 'ربع ' + r.rub : ''].filter(Boolean).join(' · ');
+        return `<div class="row"><div>
+            <b>${esc(r.student)}</b>${(pctOf(r) !== null && pctOf(r) >= 95) ? '<span style="color:#2E6B4A;font-weight:800;font-size:12px"> ما شاء الله 🌟</span>' : ''}${isNew ? '<span class="new">جديد</span>' : ''}
+            <div class="meta">${esc(r.date || '')}${where ? ' · ' + esc(where) : ''}${part ? ' · ' + esc(part) : ''}${r.supervisorName ? ' · المختبِر/ة: ' + esc(r.supervisorName) : ''}${r.demotedTo ? ' · 🔻 اتنقل لـ ' + esc(r.demotedTo) : ''}</div>
+            ${r.notes ? `<div class="note">📝 ${esc(r.notes)}</div>` : ''}
+          </div>
+          <div class="score"><span class="badge ${pass ? 'ok' : 'bad'}">${label}</span><div>${esc(r.grade)} · أخطاء ${esc(r.mistakes || 0)}</div></div>${detailHtml(r)}</div>`;
+  };
+  const sec = (title, list) => { if(!list.length) return ''; const o = list.filter(r => r.status === 'ناجح').length;
+    return '<div class="sec">' + title + ' <span>(' + AD(list.length) + ') ✅ ' + AD(o) + ' · ❌ ' + AD(list.length - o) + '</span></div>' + classSummary(list) + list.map(rowHtml).join(''); };
+  const by = {};
+  shown.forEach(r => { const kd = r.app === 'surah' ? 's' : 'j', key = r.className + '||' + kd; (by[key] = by[key] || []).push(r); });
+  const kindInfo = (rows, kd) => {
+    const set = [], add = x => { if(x && set.indexOf(x) === -1) set.push(x); };
+    rows.forEach(r => {
+      if(kd === 's'){ (Array.isArray(r.questions) ? r.questions : []).forEach(q => { if(q && q.surah) add('سورة ' + q.surah); }); }
+      else { add([r.testType || '', r.hizb !== '' && r.hizb != null ? 'حزب ' + r.hizb : '', r.rub ? 'ربع ' + r.rub : ''].filter(Boolean).join(' — ')); }
+    });
+    return set.length ? '<div class="csum"><b>' + (kd === 's' ? 'السور المختبَر فيها: ' : 'الأجزاء المختبَر فيها: ') + '</b>' + set.map(esc).join(' • ') + '</div>' : '';
+  };
+  $('list').innerHTML = Object.keys(by).sort((a, b) => { const x = a.split('||'), y = b.split('||'); return x[0].localeCompare(y[0], 'ar') || x[1].localeCompare(y[1]); }).map(key => {
+    const cn = key.split('||')[0], kd = key.split('||')[1];
+    const rows = by[key].sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    const o = rows.filter(r => r.status === 'ناجح').length;
+    const isG = r => { const p = pctOf(r); return p !== null && p >= 95; }; const wk = rows.filter(r => !isG(r)), gd = rows.filter(isG);
+    return `<div class="cls"><h3><span style="font-size:17px">${esc(cn)} <span style="font-size:13px;font-weight:700">${kd === 's' ? '🎙️ اختبار على سورة' : '📖 اختبار على جزء'}</span></span><span>✅ ${o} ناجح · ❌ ${rows.length - o} راسب</span></h3>` +
+      kindInfo(rows, kd) + sec('⚠️ الضعاف (أقل من ٩٥٪)', wk) + sec('🌟 الشطار (٩٥٪ فأكثر)', gd) + '</div>';
+  }).join('');
+
+  // علّمي اللي ظهر على إنه اتشاف
+  setTimeout(() => {
+    shown.forEach(r => { seen[r.id] = 1; });
+    try{ localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); }catch(e){}
+  }, 4000);
+}
+$('chips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if(!b) return;
+  filter = b.dataset.c; render();
+});
+// ===== مشاركة التقرير كصورة على واتساب =====
+function shotBlob(canvas){ return new Promise(res => canvas.toBlob(res, 'image/png')); }
+async function buildShots(){
+  const box = document.createElement('div'); box.id = 'shotBox';
+  const hd = document.querySelector('header').cloneNode(true);
+  const hb = hd.querySelector('.hbtns'); if(hb) hb.remove();
+  box.appendChild(hd);
+  const main = document.createElement('main');
+  main.style.cssText = 'padding:14px;max-width:none';
+  const f = filter !== 'all' ? '<div style="text-align:center;font-weight:800;margin-bottom:8px">' + esc(filter) + '</div>' : '';
+  main.innerHTML = f + '<div class="sum">' + $('sum').innerHTML + '</div><div>' + $('list').innerHTML + '</div>';
+  box.appendChild(main);
+  document.body.appendChild(box);
+  try{
+    if(document.fonts && document.fonts.ready) await document.fonts.ready;
+    const opt = {backgroundColor:'#FBF8F0', useCORS:true, logging:false, scrollX:0, scrollY:0, windowWidth:430};
+    const W = box.offsetWidth, H = box.offsetHeight;
+    // لو الطول كبير أوي نقسّم الصور على حدود كروت الفصول عشان الموبايل مايرفضش
+    if(W * H * 4 <= 14e6){
+      const c = await html2canvas(box, Object.assign({scale:2}, opt));
+      return [await shotBlob(c)];
+    }
+    const out = [];
+    const cards = Array.from(box.querySelectorAll('.cls'));
+    const groups = []; let cur = [], curH = 0;
+    cards.forEach(c => { const h = c.offsetHeight; if(cur.length && curH + h > 3200){ groups.push(cur); cur = []; curH = 0; } cur.push(c); curH += h; });
+    if(cur.length) groups.push(cur);
+    for(let i = 0; i < groups.length; i++){
+      const keep = new Set(groups[i]);
+      cards.forEach(c => { c.style.display = keep.has(c) ? '' : 'none'; });
+      main.querySelector('.sum').style.display = i === 0 ? '' : 'none';
+      hd.style.display = i === 0 ? '' : 'none';
+      const c = await html2canvas(box, Object.assign({scale:2}, opt));
+      out.push(await shotBlob(c));
+    }
+    return out;
+  } finally { box.remove(); }
+}
+$('shareBtn').addEventListener('click', async () => {
+  const btn = $('shareBtn'); const old = btn.textContent;
+  if(typeof html2canvas === 'undefined'){ alert('محتاج إنترنت عشان تجهيز الصورة. جرّبي تاني.'); return; }
+  btn.disabled = true; btn.textContent = '⏳ بجهّز الصورة...';
+  try{
+    const blobs = await buildShots();
+    const d = new Date().toISOString().slice(0, 10);
+    const files = blobs.map((b, i) => new File([b], 'نتائج-فصلي-' + d + (blobs.length > 1 ? '-' + (i + 1) : '') + '.png', {type:'image/png'}));
+    if(navigator.canShare && navigator.canShare({files})){
+      try{ await navigator.share({files, title:'نتائج فصلي'}); }
+      catch(e){ if(e && e.name === 'AbortError') return; throw e; }
+    } else {
+      files.forEach(f => { const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); });
+      alert('المتصفح مش بيدعم المشاركة المباشرة، فالصورة اتحفظت في الجهاز. افتحي واتساب وابعتيها من المعرض.');
+    }
+  }catch(e){ alert('حصلت مشكلة في تجهيز الصورة: ' + (e && e.message || e)); }
+  finally{ btn.disabled = false; btn.textContent = old; }
+});
+</script>
+</body>
+</html>
