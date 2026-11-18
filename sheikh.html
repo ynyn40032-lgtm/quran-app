@@ -8,6 +8,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   *{ box-sizing:border-box; }
   :root{ --navy:#0F2440; --gold:#C7963E; --cream:#FBF8F0; --line:#EAE1C7; --muted:#7C8A7E; --ok:#0F5132; --okbg:#DDF0E3; --bad:#A3312B; --badbg:#F6DCDA; }
@@ -98,7 +99,7 @@
 <main>
   <div id="pf" class="chips"></div>
   <div id="chips" class="chips"></div>
-  <div class="tools"><button id="xlBtn" type="button">⬇ تصدير Excel</button><button id="bkBtn" type="button">💾 نسخة احتياطية</button></div>
+  <div class="tools"><button id="crBtn" type="button" style="background:#0F2440;color:#F4EFDC;border-color:#0F2440">📊 تقرير إجمالي الفصول</button><button id="xlBtn" type="button">⬇ تصدير Excel</button><button id="bkBtn" type="button">💾 نسخة احتياطية</button></div>
   <div id="sum" class="sum"></div>
   <div id="list"></div>
 </main>
@@ -186,6 +187,8 @@ auth.onAuthStateChanged(u => {
       const list = []; snap.forEach(d => { const x = d.data(); x.id = d.id; list.push(x); });
       results = dedupe(canonClasses(list));
       render();
+      if(window.__crRedraw) window.__crRedraw();
+      else if(first && window.openClassReport) window.openClassReport();
       if(first){ first = false; }
     }, err => {
       $('list').innerHTML = '<div class="empty">⚠️ ماقدرتش أحمّل النتايج.<br>' +
@@ -257,18 +260,24 @@ function detailHtml(r){
 function ayahBlocks(q){
   const a = Array.isArray(q.ayahTexts) ? q.ayahTexts.filter(p => Array.isArray(p) && p[1]) : [];
   if(!a.length) return '';
+  const nw = s => String(s || '').replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, '');
   const m = {};
   String(q.words || '').split(/\s*،\s*/).filter(Boolean).forEach(it => {
     const mm = it.match(/^(.*?)\s*\(آية\s*([^)]*)\)\s*$/); if(!mm) return;
     const n = parseInt(String(mm[2]).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)), 10);
     (m[n] = m[n] || []).push(mm[1]);
   });
-  return a.map(p => {
-    const n = Number(p[0]), ws = m[n] || [];
-    return '<div style="margin:6px 0 2px;padding:6px 10px;border:1.5px solid #A3312B;border-right:5px solid #A3312B;border-radius:10px;background:#FDF0EE;line-height:2.1">' +
-      '<span style="color:#A3312B;font-family:\'UthmanicHafs\',\'Amiri Quran\',\'Amiri\',serif;font-size:20px;font-weight:600">' + esc(String(p[1])) + ' ﴿' + AD(n) + '﴾</span>' +
-      (ws.length ? ' <span style="font-size:13px;font-weight:800;color:#5a1f1b;background:#fff;border:1px solid #A3312B;border-radius:8px;padding:1px 8px;white-space:nowrap">الغلط: ' + ws.map(esc).join('، ') + '</span>' : '') + '</div>';
-  }).join('');
+  const chips = [];
+  a.forEach(p => {
+    const n = Number(p[0]), ws = m[n] || [], toks = String(p[1]).split(/\s+/).filter(Boolean), used = {};
+    ws.forEach(w => {
+      let k = toks.findIndex((t, i) => !used[i] && t === w);
+      if(k < 0) k = toks.findIndex((t, i) => !used[i] && nw(t) === nw(w));
+      if(k >= 0) used[k] = 1;
+      chips.push('<span style="display:inline-block;margin:2px 3px;padding:1px 10px;border:1.5px solid #A3312B;border-radius:8px;background:#FDF0EE;white-space:nowrap"><span style="color:#A3312B;font-family:\'UthmanicHafs\',\'Amiri Quran\',\'Amiri\',serif;font-size:20px;font-weight:600">' + esc(k >= 0 ? toks[k] : w) + '</span> <span style="font-size:12px;color:#7a2a25">﴿' + AD(n) + '﴾</span></span>');
+    });
+  });
+  return chips.length ? '<div style="margin:6px 0 2px;line-height:2.1">' + chips.join('') + '</div>' : '';
 }
 function classSummary(rows){
   const ps = rows.map(pctOf).filter(p => p !== null), c = {g: 0, m: 0, w: 0};
@@ -474,6 +483,247 @@ $('bkBtn').addEventListener('click', () => {
   if(!results.length){ alert('مفيش نتايج تتحفظ.'); return; }
   dlFile('نسخة-تقارير-الشيخ-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify({v: 1, saved: new Date().toISOString(), results}, null, 1), 'application/json');
 });
+
+/* ===== 📊 تقرير إجمالي بنتائج الفصول (نفس تقرير برنامج الاختبارات، بيقرا من نتايج Firebase) ===== */
+(function(){
+  const AR = '٠١٢٣٤٥٦٧٨٩', ad = s => String(s).replace(/\d/g, d => AR[d]);
+  const p2 = n => String(n).padStart(2, '0');
+  const isoD = d => d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+  const dOf = r => String(r.date || '').slice(0, 10);
+  const isS = r => r.app === 'surah';
+  const fem = r => r.gender === 'f' || r.gender === 'أنثى' || r.gender === 'بنت';
+  const passOf = r => r.status === 'ناجح';
+  const valid = r => r && r.student && r.grade !== '' && r.grade != null;
+
+  const css = document.createElement('style');
+  css.textContent =
+    '#clsRepOv{position:fixed;inset:0;z-index:2147483647;background:#1b2d4a;overflow:auto;padding:10px;direction:rtl;font-family:Cairo,Tahoma,Arial,sans-serif}' +
+    '#clsRepOv .cr-box{background:#fff;color:#111;max-width:820px;margin:0 auto;border-radius:14px;padding:14px;box-sizing:border-box}' +
+    '#clsRepOv .cr-ctl{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end;padding:10px;margin-bottom:12px;background:#f6f1e3;border:1px solid #C7963E;border-radius:10px;font-size:13px}' +
+    '#clsRepOv .cr-ctl label{display:flex;flex-direction:column;gap:3px;font-weight:700}' +
+    '#clsRepOv .cr-ctl label.ck{flex-direction:row;align-items:center;gap:6px}' +
+    '#clsRepOv .cr-ctl select,#clsRepOv .cr-ctl input[type=date]{font:inherit;padding:6px;border:1px solid #aaa;border-radius:8px;margin:0;width:auto}' +
+    '#clsRepOv .cr-ctl input[type=checkbox]{width:auto;margin:0}' +
+    '#clsRepOv .cr-ctl button{font:inherit;font-weight:800;border:0;border-radius:10px;padding:9px 16px;cursor:pointer}' +
+    '#clsRepOv .cr-acts{display:flex;flex-wrap:wrap;gap:8px;width:100%}' +
+    '#clsRepOv .cr-acts button{flex:1 1 40%;font-size:15px}' +
+    '#crExp{position:fixed;left:0;top:0;z-index:-1;width:794px;background:#fff;color:#111;box-sizing:border-box;padding:18px;direction:rtl;font-family:Cairo,Tahoma,Arial,sans-serif;pointer-events:none}' +
+    '.cr-head{text-align:center;margin-bottom:10px}.cr-head .c{font-size:24px;font-weight:800;color:#0F2440}.cr-head .t{font-size:19px;font-weight:800}.cr-head .d{font-size:15px;color:#555}' +
+    '.cr-sec{margin-bottom:16px}.cr-sec h3{font-size:19px;line-height:1.6;margin:0 0 6px}.cr-sec h3 small{font-size:15px;font-weight:600}' +
+    '#clsRepOv table,#crExp table{width:100%;border-collapse:collapse;font-size:19px;table-layout:auto}' +
+    '#clsRepOv th,#clsRepOv td,#crExp th,#crExp td{border:1px solid #444;padding:8px 7px;line-height:1.5;text-align:center}' +
+    '#clsRepOv th,#crExp th{background:#eadfbd;font-weight:800}' +
+    '#clsRepOv td.nm,#crExp td.nm{text-align:right;white-space:normal}' +
+    '#clsRepOv #crBody{width:794px;max-width:none;box-sizing:border-box}' +
+    '#clsRepOv tr,#crExp tr{break-inside:avoid}' +
+    '.cr-ok{color:#1a7a3c;font-weight:800}.cr-no{color:#b02a2a;font-weight:800}' +
+    '@media print{html.cr-open body>*:not(#clsRepOv){display:none!important}html.cr-open body>#clsRepOv{display:block!important}#clsRepOv{position:static!important;background:#fff!important;padding:0!important;overflow:visible!important}#clsRepOv .cr-box{max-width:none!important;padding:0!important;border-radius:0!important}#clsRepOv .cr-ctl{display:none!important}#clsRepOv #crBody{width:auto!important;zoom:1!important}#clsRepOv .pg{break-after:page}#clsRepOv .pg:last-child{break-after:auto}}';
+  document.head.appendChild(css);
+
+  function latestPerStudent(list){
+    const m = {};
+    list.forEach(r => {
+      const k = (isS(r) ? 's' : 'j') + '|' + nrm(r.className) + '|' + nrm(r.student), cur = m[k];
+      if(!cur || (dOf(r) + String(r.ts || 0).padStart(15, '0')) > (dOf(cur) + String(cur.ts || 0).padStart(15, '0'))) m[k] = r;
+    });
+    return Object.keys(m).map(k => m[k]);
+  }
+  function compute(o){
+    let list = results.filter(valid);
+    if(!o.surah) list = list.filter(r => !isS(r));
+    if(o.cls) list = list.filter(r => (r.className || 'بدون فصل') === o.cls);
+    if(o.from) list = list.filter(r => dOf(r) >= o.from);
+    if(o.to) list = list.filter(r => dOf(r) <= o.to);
+    if(o.latest) list = latestPerStudent(list);
+    const g = {};
+    list.forEach(r => { const c = String(r.className || '').trim() || 'بدون فصل'; (g[c] = g[c] || []).push(r); });
+    return Object.keys(g).sort((a, b) => a.localeCompare(b, 'ar')).map(c => ({name: c, rows: g[c].sort((a, b) => String(a.student).localeCompare(String(b.student), 'ar') || (a.ts || 0) - (b.ts || 0))}));
+  }
+  function subject(r){
+    if(isS(r)){ const s = []; (Array.isArray(r.questions) ? r.questions : []).forEach(q => { if(q && q.surah && s.indexOf(q.surah) < 0) s.push(q.surah); }); return s.length ? 'سورة ' + s.join('، ') : ''; }
+    return [r.testType || '', r.hizb !== '' && r.hizb != null ? 'حزب ' + r.hizb : '', r.rub ? 'ربع ' + r.rub : ''].filter(Boolean).join(' — ');
+  }
+  function bodyHtml(o){
+    const gs = compute(o), today = ad(new Date().toLocaleDateString('en-GB'));
+    let h = '<div class="cr-head"><div class="c">مركز الأمين الثقافي التربوي</div><div class="t">تقرير إجمالي بنتائج الفصول — ' + (o.surah ? 'اختبارات القرآن واختبار على سورة' : 'اختبارات القرآن') + '</div><div class="d">' + (o.from || o.to ? 'من ' + ad(o.from || '…') + ' إلى ' + ad(o.to || '…') + ' — ' : '') + today + '</div></div>';
+    if(!gs.length) return h + '<div style="text-align:center;padding:20px;color:#777">مفيش اختبارات تطابق الاختيار ده.</div>';
+    gs.forEach((g, gi) => {
+      let pass = 0, fail = 0;
+      const rows = g.rows.map((r, i) => {
+        const n = Number(r.grade), p = passOf(r); if(p) pass++; else fail++;
+        const label = p ? (fem(r) ? 'ناجحة' : 'ناجح') : (fem(r) ? 'راسبة' : 'راسب');
+        const gr = isNaN(n) ? esc(r.grade) : ad(n) + '/' + ad(isS(r) ? 10 : 100);
+        const ms = (r.mistakes === '' || r.mistakes == null) ? '-' : ad(r.mistakes);
+        return '<tr><td style="width:44px">' + ad(i + 1) + '</td><td class="nm">' + esc(r.student) + '</td><td>' + ms + '</td><td>' + gr + '</td><td class="' + (p ? 'cr-ok' : 'cr-no') + '">' + label + '</td></tr>';
+      }).join('');
+      const sv = [], sj = [], ss = [];
+      g.rows.forEach(r => { const v = String(r.supervisorName || '').trim(); if(v && sv.indexOf(v) < 0) sv.push(v); if(!isS(r)){ const t = subject(r); if(t && sj.indexOf(t) < 0) sj.push(t); } else { (Array.isArray(r.questions) ? r.questions : []).forEach(q => { if(q && q.surah && ss.indexOf(q.surah) < 0) ss.push(q.surah); }); } });
+      h += '<div class="cr-sec' + (o.pages && gi < gs.length - 1 ? ' pg' : '') + '"><h3>الفصل: ' + esc(g.name) +
+        (sv.length ? ' <span style="color:#8A6A20">— المختبِر/ة: ' + esc(sv.join('، ')) + '</span>' : '') +
+        (sj.length ? ' <span style="color:#1d4f8a">— ' + esc(sj.join('، ')) + '</span>' : '') +
+        (ss.length ? ' <span style="color:#1d4f8a">— السورة: ' + esc(ss.join('، ')) + '</span>' : '') +
+        ' <small>(عدد الطلاب: ' + ad(g.rows.length) + ' — ناجح: ' + ad(pass) + ' — راسب: ' + ad(fail) + ')</small></h3>' +
+        '<table><thead><tr><th>م</th><th>الإسم</th><th>عدد الأخطاء</th><th>الدرجة</th><th>النتيجة</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+    });
+    return h;
+  }
+  function textReport(o){
+    const gs = compute(o); if(!gs.length) return '';
+    let t = '*مركز الأمين الثقافي التربوي*\n*تقرير إجمالي بنتائج الفصول*\n' + ad(new Date().toLocaleDateString('en-GB')) + '\n';
+    gs.forEach(g => {
+      let ok = 0; g.rows.forEach(r => { if(passOf(r)) ok++; });
+      t += '\n*الفصل: ' + g.name + '* (ناجح ' + ad(ok) + ' — راسب ' + ad(g.rows.length - ok) + ')\n';
+      g.rows.forEach((r, i) => { const n = Number(r.grade); t += ad(i + 1) + '. ' + r.student + ' — ' + (isNaN(n) ? r.grade : ad(n) + '/' + ad(isS(r) ? 10 : 100)) + ' — ' + (passOf(r) ? (fem(r) ? 'ناجحة' : 'ناجح') : (fem(r) ? 'راسبة' : 'راسب')) + '\n'; });
+    });
+    return t;
+  }
+
+  function openReport(){
+    const old = $('clsRepOv'); if(old) old.remove();
+    const names = [...new Set(results.filter(valid).map(r => String(r.className || '').trim() || 'بدون فصل'))].sort((a, b) => a.localeCompare(b, 'ar'));
+    // الأسابيع (السبت → الجمعة)
+    const now = new Date(), todayS = isoD(now), start0 = new Date(now); start0.setDate(now.getDate() - ((now.getDay() + 1) % 7));
+    const weeks = [];
+    for(let k = 0; k < 8; k++){
+      const s = new Date(start0); s.setDate(s.getDate() - 7 * k);
+      const e = new Date(s); e.setDate(e.getDate() + 6);
+      const from = isoD(s), to = (k === 0 && isoD(e) > todayS) ? todayS : isoD(e);
+      const cn = new Set(results.filter(valid).filter(r => dOf(r) >= from && dOf(r) <= to).map(r => r.className || 'بدون فصل')).size;
+      const eD = new Date(to + 'T12:00:00');
+      weeks.push({from, to, label: ad(p2(s.getDate()) + '/' + p2(s.getMonth() + 1)) + ' إلى ' + ad(p2(eD.getDate()) + '/' + p2(eD.getMonth() + 1)) + ' (' + ad(cn) + ' فصل' + (k === 0 ? ' — الأسبوع ده' : '') + ')'});
+    }
+    const ov = document.createElement('div'); ov.id = 'clsRepOv';
+    ov.innerHTML = '<div class="cr-box"><div class="cr-ctl">' +
+      '<label>الفصل<select id="crCls"><option value="">كل الفصول</option>' + names.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('') + '</select></label>' +
+      '<label>الأسبوع<select id="crWeekSel"><option value="">كل الفترات</option>' + weeks.map((w, i) => '<option value="' + i + '">' + w.label + '</option>').join('') + '</select></label>' +
+      '<label>من تاريخ<input type="date" id="crFrom"></label><label>إلى تاريخ<input type="date" id="crTo"></label>' +
+      '<label class="ck"><input type="checkbox" id="crLatest" checked> آخر اختبار لكل طالب بس</label>' +
+      '<label class="ck"><input type="checkbox" id="crPages"> كل فصل في صفحة</label>' +
+      '<label class="ck"><input type="checkbox" id="crSurah" checked> يشمل اختبارات «اختبار على سورة»</label>' +
+      '<div class="cr-acts">' +
+      '<button type="button" id="crPrint" style="background:#0F2440;color:#fff">🖨️ طباعة</button>' +
+      '<button type="button" id="crPrintL" style="background:#0F2440;color:#fff">🖨️ طباعة عرضي</button>' +
+      '<button type="button" id="crPdf" style="background:#B02A2A;color:#fff">📄 حفظ PDF</button>' +
+      '<button type="button" id="crWa" style="background:#1a9d4b;color:#fff">📲 واتساب PDF</button>' +
+      '<button type="button" id="crImg" style="background:#1d4f8a;color:#fff">🖼️ صورة</button>' +
+      '<button type="button" id="crWaTxt" style="background:#1a9d4b;color:#fff">💬 واتساب نص</button>' +
+      '</div><div id="crMsg" style="width:100%;font-weight:700;color:#8A6A20"></div>' +
+      '<button type="button" id="crClose" style="background:#eee;color:#0F2440">إغلاق</button></div>' +
+      '<div id="crBody"></div></div>';
+    document.body.appendChild(ov);
+    document.documentElement.classList.add('cr-open');
+    const g = id => $(id), msg = t => { g('crMsg').textContent = t || ''; };
+    const opts = () => ({cls: g('crCls').value, from: g('crFrom').value, to: g('crTo').value, latest: g('crLatest').checked, pages: g('crPages').checked, surah: g('crSurah').checked});
+    function fit(){
+      const bd = g('crBody'); if(!bd) return;
+      const box = bd.parentNode, cs = getComputedStyle(box), avail = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      bd.style.zoom = '1'; bd.style.width = '794px';
+      bd.style.zoom = String(Math.min(1, avail / 794) || 1);
+    }
+    function redraw(){ g('crBody').innerHTML = bodyHtml(opts()); fit(); }
+    const onResize = () => fit(); window.addEventListener('resize', onResize);
+    function close(){ window.__crRedraw = null; window.removeEventListener('resize', onResize); ov.remove(); document.documentElement.classList.remove('cr-open'); }
+    g('crClose').onclick = close;
+    g('crWeekSel').addEventListener('change', () => {
+      const v = g('crWeekSel').value;
+      if(v === ''){ g('crFrom').value = ''; g('crTo').value = ''; }
+      else { g('crFrom').value = weeks[+v].from; g('crTo').value = weeks[+v].to; }
+      redraw();
+    });
+    ['crFrom', 'crTo'].forEach(id => g(id).addEventListener('change', () => { g('crWeekSel').value = ''; redraw(); }));
+    ['crCls', 'crLatest', 'crPages', 'crSurah'].forEach(id => g(id).addEventListener('change', redraw));
+    // افتراضي: الأسبوع الحالي
+    g('crWeekSel').value = '0'; g('crFrom').value = weeks[0].from; g('crTo').value = weeks[0].to;
+    redraw();
+    window.__crRedraw = function(){
+      const sel = g('crCls'); if(!sel) return;
+      const v = sel.value, nn = [...new Set(results.filter(valid).map(r => String(r.className || '').trim() || 'بدون فصل'))].sort((a, b) => a.localeCompare(b, 'ar'));
+      sel.innerHTML = '<option value="">كل الفصول</option>' + nn.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('');
+      sel.value = nn.indexOf(v) >= 0 ? v : '';
+      redraw();
+    };
+
+    function printAs(orient){
+      const st = document.createElement('style'); st.id = 'crPageSt'; st.textContent = '@page{size:A4 ' + orient + ';margin:10mm}'; document.head.appendChild(st);
+      const done = () => { const x = $('crPageSt'); if(x) x.remove(); window.removeEventListener('afterprint', done); };
+      window.addEventListener('afterprint', done); window.print(); setTimeout(done, 60000);
+    }
+    g('crPrint').onclick = () => printAs('portrait');
+    g('crPrintL').onclick = () => printAs('landscape');
+
+    /* ===== صفحات A4 كصور (الفصل ما يتقطعش نصين لو دخل في صفحة) ===== */
+    async function pagesCanvases(){
+      if(typeof html2canvas === 'undefined') throw new Error('html2canvas');
+      let x = $('crExp'); if(x) x.remove();
+      x = document.createElement('div'); x.id = 'crExp'; x.innerHTML = bodyHtml(opts()); document.body.appendChild(x);
+      try{
+        if(document.fonts && document.fonts.ready) await document.fonts.ready;
+        const SC = 2, PW = 794, PH = 1123, PAD = 18, usable = PH - PAD * 2, list = [];
+        for(const b of Array.from(x.children)){
+          const c = await html2canvas(b, {scale: SC, backgroundColor: '#ffffff', logging: false, scrollX: 0, scrollY: 0, windowWidth: 900});
+          list.push({head: b.classList.contains('cr-head'), c, h: c.height / SC});
+        }
+        const pages = []; let cur = null, used = 0;
+        const np = () => { cur = []; used = 0; pages.push(cur); }; np();
+        list.forEach(it => {
+          if(!it.head && g('crPages').checked && cur.some(q => !q.head)) np();
+          if(used + it.h > usable && cur.length) np();
+          cur.push(it); used += it.h + 12;
+        });
+        return pages.map(items => {
+          const c = document.createElement('canvas'); c.width = PW * SC; c.height = PH * SC;
+          const cx = c.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
+          let y = PAD;
+          items.forEach(it => {
+            const w = it.c.width / SC; let k = 1; if(w > PW - PAD * 2) k = (PW - PAD * 2) / w;
+            const dw = w * k, dh = it.h * k;
+            cx.drawImage(it.c, (PW - dw) / 2 * SC, y * SC, dw * SC, dh * SC); y += dh + 12;
+          });
+          return c;
+        });
+      } finally { x.remove(); }
+    }
+    const stem = () => 'تقرير-الفصول-' + isoD(new Date());
+    const toBlob = (c, type, q) => new Promise(r => c.toBlob(r, type, q));
+    async function makePdf(){
+      const cs = await pagesCanvases();
+      if(!(window.jspdf && window.jspdf.jsPDF)) throw new Error('jspdf');
+      const pdf = new window.jspdf.jsPDF({unit: 'mm', format: 'a4', orientation: 'p'});
+      cs.forEach((c, i) => { if(i) pdf.addPage(); pdf.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297); });
+      return pdf.output('blob');
+    }
+    function saveFiles(files){
+      files.forEach(f => { const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(a.href); }, 1500); });
+    }
+    async function shareFiles(files, title){
+      if(navigator.canShare && navigator.canShare({files})){
+        try{ await navigator.share({files, title}); return; }catch(e){ if(e && e.name === 'AbortError') return; }
+      }
+      saveFiles(files); msg('اتحفظ الملف في الجهاز — ابعتيه من واتساب من الملفات/المعرض.');
+    }
+    async function run(btn, fn){
+      if(!compute(opts()).length){ msg('مفيش اختبارات تطابق الاختيار ده.'); return; }
+      const old = btn.textContent; btn.disabled = true; btn.textContent = '⏳ ...'; msg('');
+      try{ await fn(); }
+      catch(e){ msg(e && /jspdf/.test(e.message) ? 'مكتبة PDF مش متحمّلة — اتأكدي من النت وجرّبي تاني.' : 'حصلت مشكلة في التجهيز، جرّبي تاني.'); }
+      btn.disabled = false; btn.textContent = old;
+    }
+    g('crPdf').onclick = () => run(g('crPdf'), async () => { saveFiles([new File([await makePdf()], stem() + '.pdf', {type: 'application/pdf'})]); });
+    g('crWa').onclick = () => run(g('crWa'), async () => { await shareFiles([new File([await makePdf()], stem() + '.pdf', {type: 'application/pdf'})], 'تقرير الفصول'); });
+    g('crImg').onclick = () => run(g('crImg'), async () => {
+      const cs = await pagesCanvases(), files = [];
+      for(let i = 0; i < cs.length; i++) files.push(new File([await toBlob(cs[i], 'image/png')], stem() + (cs.length > 1 ? '-' + (i + 1) : '') + '.png', {type: 'image/png'}));
+      await shareFiles(files, 'تقرير الفصول');
+    });
+    g('crWaTxt').onclick = () => {
+      const t = textReport(opts()); if(!t){ msg('مفيش اختبارات تطابق الاختيار ده.'); return; }
+      const w = window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank');
+      if(!w){ try{ navigator.clipboard.writeText(t); msg('اتنسخ النص، الصقيه في واتساب ✓'); }catch(_){ prompt('انسخي النص:', t); } }
+    };
+  }
+  window.openClassReport = openReport;
+  $('crBtn').addEventListener('click', openReport);
+})();
 </script>
 </body>
 </html>
