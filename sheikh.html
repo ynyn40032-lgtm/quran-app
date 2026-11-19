@@ -555,10 +555,6 @@ $('bkBtn').addEventListener('click', () => {
     if(isS(r)){ const s = []; (Array.isArray(r.questions) ? r.questions : []).forEach(q => { if(q && q.surah && s.indexOf(q.surah) < 0) s.push(q.surah); }); return s.length ? 'سورة ' + s.join('، ') : ''; }
     return [r.testType || '', r.hizb !== '' && r.hizb != null ? 'حزب ' + r.hizb : '', r.rub ? 'ربع ' + r.rub : ''].filter(Boolean).join(' — ');
   }
-  function brTag(g){
-    const bv = []; g.rows.forEach(r => { const b = String(r.branch || '').trim(); if(b && bv.indexOf(b) < 0) bv.push(b); });
-    return bv.length ? ' <span style="color:#6A1B9A">— ' + bv.map(b => esc(/^فرع\s/.test(b) ? b : 'فرع ' + b)).join('، ') + '</span>' : '';
-  }
   function bodyHtml(o){
     const gs = compute(o), today = ad(new Date().toLocaleDateString('en-GB'));
     let h = '<div class="cr-head"><div class="c">مركز الأمين الثقافي التربوي</div><div class="t">تقرير إجمالي بنتائج الفصول — ' + (o.surah ? 'اختبارات القرآن واختبار على سورة' : 'اختبارات القرآن') + '</div><div class="d">' + today + '</div></div>';
@@ -574,7 +570,7 @@ $('bkBtn').addEventListener('click', () => {
       }).join('');
       const sv = [], sj = [], ss = [];
       g.rows.forEach(r => { const v = String(r.supervisorName || '').trim(); if(v && sv.indexOf(v) < 0) sv.push(v); if(!isS(r)){ const t = subject(r); if(t && sj.indexOf(t) < 0) sj.push(t); } else { (Array.isArray(r.questions) ? r.questions : []).forEach(q => { if(q && q.surah && ss.indexOf(q.surah) < 0) ss.push(q.surah); }); } });
-      h += '<div class="cr-sec' + (o.pages && gi < gs.length - 1 ? ' pg' : '') + '"><h3>الفصل: ' + esc(g.name) + brTag(g) +
+      h += '<div class="cr-sec' + (o.pages && gi < gs.length - 1 ? ' pg' : '') + '"><h3>الفصل: ' + esc(g.name) +
         ' <span style="color:#8A6A20">— المحفظ/ة: ' + (sv.length ? esc(sv.join('، ').replace(/^\s*أ\s*[.\/]\s*/, '')) : 'غير محددة') + '</span>' +
         (sj.length ? ' <span style="color:#1d4f8a">— ' + esc(sj.join('، ')) + '</span>' : '') +
         (ss.length ? ' <span style="color:#1d4f8a">— السورة: ' + esc(ss.join('، ')) + '</span>' : '') +
@@ -654,7 +650,9 @@ $('bkBtn').addEventListener('click', () => {
     document.body.appendChild(ov);
     document.documentElement.classList.add('cr-open');
     const g = id => $(id), msg = t => { g('crMsg').textContent = t || ''; };
-    const opts = () => ({br: g('crBr').value, cls: g('crCls').value, from: g('crFrom').value, to: g('crTo').value, latest: g('crLatest').checked, pages: g('crPages').checked, surah: g('crSurah').checked});
+    let auto = true;
+    const fillRange = () => { const ds = results.filter(valid).map(dOf).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort(); g('crFrom').value = ds.length ? ds[0] : ''; g('crTo').value = (ds.length && ds[ds.length - 1] > todayS) ? ds[ds.length - 1] : todayS; };
+    const opts = () => ({br: g('crBr').value, cls: g('crCls').value, from: auto ? '' : g('crFrom').value, to: auto ? '' : g('crTo').value, latest: g('crLatest').checked, pages: g('crPages').checked, surah: g('crSurah').checked});
     function fit(){
       const bd = g('crBody'); if(!bd) return;
       const box = bd.parentNode, cs = getComputedStyle(box), avail = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
@@ -670,15 +668,15 @@ $('bkBtn').addEventListener('click', () => {
     g('crClose').onclick = close;
     g('crWeekSel').addEventListener('change', () => {
       const v = g('crWeekSel').value;
-      if(v === ''){ g('crFrom').value = ''; g('crTo').value = ''; }
-      else { g('crFrom').value = weeks[+v].from; g('crTo').value = weeks[+v].to; }
+      if(v === ''){ auto = true; fillRange(); }
+      else { auto = false; g('crFrom').value = weeks[+v].from; g('crTo').value = weeks[+v].to; }
       redraw();
     });
-    ['crFrom', 'crTo'].forEach(id => g(id).addEventListener('change', () => { g('crWeekSel').value = ''; redraw(); }));
+    ['crFrom', 'crTo'].forEach(id => g(id).addEventListener('change', () => { if(id === 'crFrom') g('crTo').value = g('crFrom').value; auto = false; g('crWeekSel').value = ''; redraw(); }));
     ['crCls', 'crLatest', 'crPages', 'crSurah'].forEach(id => g(id).addEventListener('change', redraw));
     g('crBr').addEventListener('change', () => { g('crCls').value = ''; redraw(); });
     // افتراضي: الأسبوع الحالي
-    g('crWeekSel').value = ''; g('crFrom').value = ''; g('crTo').value = '';
+    g('crWeekSel').value = ''; fillRange();
     redraw();
     window.__crRedraw = function(){
       const sel = g('crCls'); if(!sel) return;
@@ -688,6 +686,7 @@ $('bkBtn').addEventListener('click', () => {
       const bsel = g('crBr'), bv = bsel.value, bb = [...new Set(results.filter(valid).map(r => String(r.branch || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
       bsel.innerHTML = '<option value="">كل الفروع</option>' + bb.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('');
       bsel.value = bb.indexOf(bv) >= 0 ? bv : '';
+      if(auto) fillRange();
       redraw();
     };
 
