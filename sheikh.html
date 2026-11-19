@@ -512,6 +512,7 @@ $('bkBtn').addEventListener('click', () => {
     '#clsRepOv .cr-ctl label{display:flex;flex-direction:column;gap:3px;font-weight:700}' +
     '#clsRepOv .cr-ctl label.ck{flex-direction:row;align-items:center;gap:6px}' +
     '#clsRepOv .cr-ctl select,#clsRepOv .cr-ctl input[type=date]{font:inherit;padding:6px;border:1px solid #aaa;border-radius:8px;margin:0;width:auto}' +
+    '#clsRepOv .cr-ctl input[type=date]{min-width:150px;min-height:38px}' +
     '#clsRepOv .cr-ctl input[type=checkbox]{width:auto;margin:0}' +
     '#clsRepOv .cr-ctl button{font:inherit;font-weight:800;border:0;border-radius:10px;padding:9px 16px;cursor:pointer}' +
     '#clsRepOv .cr-acts{display:flex;flex-wrap:wrap;gap:8px;width:100%}' +
@@ -542,6 +543,7 @@ $('bkBtn').addEventListener('click', () => {
     let list = results.filter(valid);
     if(!o.surah) list = list.filter(r => !isS(r));
     if(o.cls) list = list.filter(r => (r.className || 'بدون فصل') === o.cls);
+    if(o.br) list = list.filter(r => String(r.branch || '').trim() === o.br);
     if(o.from) list = list.filter(r => dOf(r) >= o.from);
     if(o.to) list = list.filter(r => dOf(r) <= o.to);
     if(o.latest) list = latestPerStudent(list);
@@ -552,6 +554,10 @@ $('bkBtn').addEventListener('click', () => {
   function subject(r){
     if(isS(r)){ const s = []; (Array.isArray(r.questions) ? r.questions : []).forEach(q => { if(q && q.surah && s.indexOf(q.surah) < 0) s.push(q.surah); }); return s.length ? 'سورة ' + s.join('، ') : ''; }
     return [r.testType || '', r.hizb !== '' && r.hizb != null ? 'حزب ' + r.hizb : '', r.rub ? 'ربع ' + r.rub : ''].filter(Boolean).join(' — ');
+  }
+  function brTag(g){
+    const bv = []; g.rows.forEach(r => { const b = String(r.branch || '').trim(); if(b && bv.indexOf(b) < 0) bv.push(b); });
+    return bv.length ? ' <span style="color:#6A1B9A">— ' + bv.map(b => esc(/^فرع\s/.test(b) ? b : 'فرع ' + b)).join('، ') + '</span>' : '';
   }
   function bodyHtml(o){
     const gs = compute(o), today = ad(new Date().toLocaleDateString('en-GB'));
@@ -568,7 +574,7 @@ $('bkBtn').addEventListener('click', () => {
       }).join('');
       const sv = [], sj = [], ss = [];
       g.rows.forEach(r => { const v = String(r.supervisorName || '').trim(); if(v && sv.indexOf(v) < 0) sv.push(v); if(!isS(r)){ const t = subject(r); if(t && sj.indexOf(t) < 0) sj.push(t); } else { (Array.isArray(r.questions) ? r.questions : []).forEach(q => { if(q && q.surah && ss.indexOf(q.surah) < 0) ss.push(q.surah); }); } });
-      h += '<div class="cr-sec' + (o.pages && gi < gs.length - 1 ? ' pg' : '') + '"><h3>الفصل: ' + esc(g.name) +
+      h += '<div class="cr-sec' + (o.pages && gi < gs.length - 1 ? ' pg' : '') + '"><h3>الفصل: ' + esc(g.name) + brTag(g) +
         ' <span style="color:#8A6A20">— المحفظ/ة: ' + (sv.length ? esc(sv.join('، ').replace(/^\s*أ\s*[.\/]\s*/, '')) : 'غير محددة') + '</span>' +
         (sj.length ? ' <span style="color:#1d4f8a">— ' + esc(sj.join('، ')) + '</span>' : '') +
         (ss.length ? ' <span style="color:#1d4f8a">— السورة: ' + esc(ss.join('، ')) + '</span>' : '') +
@@ -614,6 +620,7 @@ $('bkBtn').addEventListener('click', () => {
   function openReport(){
     const old = $('clsRepOv'); if(old) old.remove();
     const names = [...new Set(results.filter(valid).map(r => String(r.className || '').trim() || 'بدون فصل'))].sort((a, b) => a.localeCompare(b, 'ar'));
+    const brNames = [...new Set(results.filter(valid).map(r => String(r.branch || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
     // الأسابيع (السبت → الجمعة)
     const now = new Date(), todayS = isoD(now), start0 = new Date(now); start0.setDate(now.getDate() - ((now.getDay() + 1) % 7));
     const weeks = [];
@@ -627,6 +634,7 @@ $('bkBtn').addEventListener('click', () => {
     }
     const ov = document.createElement('div'); ov.id = 'clsRepOv';
     ov.innerHTML = '<div class="cr-box"><div class="cr-ctl">' +
+      '<label>الفرع<select id="crBr"><option value="">كل الفروع</option>' + brNames.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('') + '</select></label>' +
       '<label>الفصل<select id="crCls"><option value="">كل الفصول</option>' + names.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('') + '</select></label>' +
       '<label>الأسبوع<select id="crWeekSel"><option value="">كل الفترات</option>' + weeks.map((w, i) => '<option value="' + i + '">' + w.label + '</option>').join('') + '</select></label>' +
       '<label>من تاريخ<input type="date" id="crFrom"></label><label>إلى تاريخ<input type="date" id="crTo"></label>' +
@@ -646,7 +654,7 @@ $('bkBtn').addEventListener('click', () => {
     document.body.appendChild(ov);
     document.documentElement.classList.add('cr-open');
     const g = id => $(id), msg = t => { g('crMsg').textContent = t || ''; };
-    const opts = () => ({cls: g('crCls').value, from: g('crFrom').value, to: g('crTo').value, latest: g('crLatest').checked, pages: g('crPages').checked, surah: g('crSurah').checked});
+    const opts = () => ({br: g('crBr').value, cls: g('crCls').value, from: g('crFrom').value, to: g('crTo').value, latest: g('crLatest').checked, pages: g('crPages').checked, surah: g('crSurah').checked});
     function fit(){
       const bd = g('crBody'); if(!bd) return;
       const box = bd.parentNode, cs = getComputedStyle(box), avail = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
@@ -668,6 +676,7 @@ $('bkBtn').addEventListener('click', () => {
     });
     ['crFrom', 'crTo'].forEach(id => g(id).addEventListener('change', () => { g('crWeekSel').value = ''; redraw(); }));
     ['crCls', 'crLatest', 'crPages', 'crSurah'].forEach(id => g(id).addEventListener('change', redraw));
+    g('crBr').addEventListener('change', () => { g('crCls').value = ''; redraw(); });
     // افتراضي: الأسبوع الحالي
     g('crWeekSel').value = ''; g('crFrom').value = ''; g('crTo').value = '';
     redraw();
@@ -676,6 +685,9 @@ $('bkBtn').addEventListener('click', () => {
       const v = sel.value, nn = [...new Set(results.filter(valid).map(r => String(r.className || '').trim() || 'بدون فصل'))].sort((a, b) => a.localeCompare(b, 'ar'));
       sel.innerHTML = '<option value="">كل الفصول</option>' + nn.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('');
       sel.value = nn.indexOf(v) >= 0 ? v : '';
+      const bsel = g('crBr'), bv = bsel.value, bb = [...new Set(results.filter(valid).map(r => String(r.branch || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
+      bsel.innerHTML = '<option value="">كل الفروع</option>' + bb.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('');
+      bsel.value = bb.indexOf(bv) >= 0 ? bv : '';
       redraw();
     };
 
