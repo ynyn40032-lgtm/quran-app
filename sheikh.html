@@ -669,7 +669,7 @@ $('bkBtn').addEventListener('click', () => {
     ['crFrom', 'crTo'].forEach(id => g(id).addEventListener('change', () => { g('crWeekSel').value = ''; redraw(); }));
     ['crCls', 'crLatest', 'crPages', 'crSurah'].forEach(id => g(id).addEventListener('change', redraw));
     // افتراضي: الأسبوع الحالي
-    g('crWeekSel').value = '0'; g('crFrom').value = weeks[0].from; g('crTo').value = weeks[0].to;
+    g('crWeekSel').value = ''; g('crFrom').value = ''; g('crTo').value = '';
     redraw();
     window.__crRedraw = function(){
       const sel = g('crCls'); if(!sel) return;
