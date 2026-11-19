@@ -558,7 +558,7 @@ $('bkBtn').addEventListener('click', () => {
   function bodyHtml(o){
     const gs = compute(o), today = ad(new Date().toLocaleDateString('en-GB'));
     let h = '<div class="cr-head"><div class="c">مركز الأمين الثقافي التربوي</div><div class="t">تقرير إجمالي بنتائج الفصول — ' + (o.surah ? 'اختبارات القرآن واختبار على سورة' : 'اختبارات القرآن') + '</div><div class="d">' + today + '</div></div>';
-    if(!gs.length) return h + '<div style="text-align:center;padding:20px;color:#777">مفيش اختبارات تطابق الاختيار ده.</div>';
+    if(!gs.length) return h + '<div style="text-align:center;padding:20px;color:#777;font-weight:700">' + ((o.from && o.from === o.to) ? 'لا يوجد اختبار لليوم ده' : (o.from ? 'لا يوجد اختبار في الفترة دي' : 'مفيش اختبارات تطابق الاختيار ده.')) + '</div>';
     gs.forEach((g, gi) => {
       let pass = 0, fail = 0;
       const rows = g.rows.map((r, i) => {
@@ -617,12 +617,12 @@ $('bkBtn').addEventListener('click', () => {
     const old = $('clsRepOv'); if(old) old.remove();
     const names = [...new Set(results.filter(valid).map(r => String(r.className || '').trim() || 'بدون فصل'))].sort((a, b) => a.localeCompare(b, 'ar'));
     const brNames = [...new Set(results.filter(valid).map(r => String(r.branch || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
-    // الأسابيع (السبت → الجمعة)
+    // الأسابيع (السبت → الخميس)
     const now = new Date(), todayS = isoD(now), start0 = new Date(now); start0.setDate(now.getDate() - ((now.getDay() + 1) % 7));
     const weeks = [];
     for(let k = 0; k < 8; k++){
       const s = new Date(start0); s.setDate(s.getDate() - 7 * k);
-      const e = new Date(s); e.setDate(e.getDate() + 6);
+      const e = new Date(s); e.setDate(e.getDate() + 5);
       const from = isoD(s), to = (k === 0 && isoD(e) > todayS) ? todayS : isoD(e);
       const cn = new Set(results.filter(valid).filter(r => dOf(r) >= from && dOf(r) <= to).map(r => r.className || 'بدون فصل')).size;
       const eD = new Date(to + 'T12:00:00');
@@ -633,7 +633,8 @@ $('bkBtn').addEventListener('click', () => {
       '<label>الفرع<select id="crBr"><option value="">كل الفروع</option>' + brNames.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('') + '</select></label>' +
       '<label>الفصل<select id="crCls"><option value="">كل الفصول</option>' + names.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('') + '</select></label>' +
       '<label>الأسبوع<select id="crWeekSel"><option value="">كل الفترات</option>' + weeks.map((w, i) => '<option value="' + i + '">' + w.label + '</option>').join('') + '</select></label>' +
-      '<label>من تاريخ<input type="date" id="crFrom"></label><label>إلى تاريخ<input type="date" id="crTo"></label>' +
+      '<label>أيام فيها اختبارات<select id="crDaySel"><option value="">كل الأيام</option></select></label><label>أو اختاري تاريخ<input type="date" id="crDay"></label><input type="hidden" id="crFrom"><input type="hidden" id="crTo">' +
+      '<button type="button" id="crAll" style="background:#C7963E;color:#fff">كل الأيام</button>' +
       '<label class="ck"><input type="checkbox" id="crLatest" checked> آخر اختبار لكل طالب بس</label>' +
       '<label class="ck"><input type="checkbox" id="crPages"> كل فصل في صفحة</label>' +
       '<label class="ck"><input type="checkbox" id="crSurah" checked> يشمل اختبارات «اختبار على سورة»</label>' +
@@ -651,7 +652,7 @@ $('bkBtn').addEventListener('click', () => {
     document.documentElement.classList.add('cr-open');
     const g = id => $(id), msg = t => { g('crMsg').textContent = t || ''; };
     let auto = true;
-    const fillRange = () => { const ds = results.filter(valid).map(dOf).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort(); g('crFrom').value = ds.length ? ds[0] : ''; g('crTo').value = (ds.length && ds[ds.length - 1] > todayS) ? ds[ds.length - 1] : todayS; };
+    const fillRange = () => { g('crDay').value = ''; if(g('crDaySel')) g('crDaySel').value = ''; const ds = results.filter(valid).map(dOf).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort(); g('crFrom').value = ds.length ? ds[0] : ''; g('crTo').value = (ds.length && ds[ds.length - 1] > todayS) ? ds[ds.length - 1] : todayS; };
     const opts = () => ({br: g('crBr').value, cls: g('crCls').value, from: auto ? '' : g('crFrom').value, to: auto ? '' : g('crTo').value, latest: g('crLatest').checked, pages: g('crPages').checked, surah: g('crSurah').checked});
     function fit(){
       const bd = g('crBody'); if(!bd) return;
@@ -667,12 +668,26 @@ $('bkBtn').addEventListener('click', () => {
     function close(){ window.__crRedraw = null; window.removeEventListener('resize', onResize); ov.remove(); document.documentElement.classList.remove('cr-open'); }
     g('crClose').onclick = close;
     g('crWeekSel').addEventListener('change', () => {
-      const v = g('crWeekSel').value;
+      const v = g('crWeekSel').value; g('crDaySel').value = '';
       if(v === ''){ auto = true; fillRange(); }
-      else { auto = false; g('crFrom').value = weeks[+v].from; g('crTo').value = weeks[+v].to; }
+      else { auto = false; g('crDay').value = ''; g('crFrom').value = weeks[+v].from; g('crTo').value = weeks[+v].to; }
       redraw();
     });
-    ['crFrom', 'crTo'].forEach(id => g(id).addEventListener('change', () => { if(id === 'crFrom') g('crTo').value = g('crFrom').value; auto = false; g('crWeekSel').value = ''; redraw(); }));
+    const fillDays = () => {
+      const cnt = {}; results.filter(valid).forEach(r => { const d = dOf(r); if(/^\d{4}-\d{2}-\d{2}$/.test(d)) (cnt[d] = cnt[d] || new Set()).add(r.className || 'بدون فصل'); });
+      const cur = g('crDaySel').value, ds = Object.keys(cnt).sort().reverse();
+      g('crDaySel').innerHTML = '<option value="">كل الأيام</option>' + ds.map(d => '<option value="' + d + '">' + ad(d.slice(8) + '/' + d.slice(5, 7)) + ' (' + ad(cnt[d].size) + ' فصل)</option>').join('');
+      g('crDaySel').value = ds.indexOf(cur) >= 0 ? cur : '';
+    };
+    fillDays();
+    g('crDaySel').addEventListener('change', () => {
+      const d = g('crDaySel').value; g('crWeekSel').value = '';
+      if(!d){ auto = true; fillRange(); }
+      else { auto = false; g('crDay').value = d; g('crFrom').value = d; g('crTo').value = d; }
+      redraw();
+    });
+    ['change', 'input'].forEach(ev => g('crDay').addEventListener(ev, () => { const d = g('crDay').value; if(!d) return; auto = false; g('crFrom').value = d; g('crTo').value = d; g('crWeekSel').value = ''; g('crDaySel').value = [...g('crDaySel').options].some(o => o.value === d) ? d : ''; redraw(); }));
+    g('crAll').onclick = () => { g('crDaySel').value = ''; g('crWeekSel').value = ''; auto = true; fillRange(); redraw(); };
     ['crCls', 'crLatest', 'crPages', 'crSurah'].forEach(id => g(id).addEventListener('change', redraw));
     g('crBr').addEventListener('change', () => { g('crCls').value = ''; redraw(); });
     // افتراضي: الأسبوع الحالي
@@ -686,7 +701,7 @@ $('bkBtn').addEventListener('click', () => {
       const bsel = g('crBr'), bv = bsel.value, bb = [...new Set(results.filter(valid).map(r => String(r.branch || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
       bsel.innerHTML = '<option value="">كل الفروع</option>' + bb.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('');
       bsel.value = bb.indexOf(bv) >= 0 ? bv : '';
-      if(auto) fillRange();
+      fillDays(); if(auto) fillRange();
       redraw();
     };
 
