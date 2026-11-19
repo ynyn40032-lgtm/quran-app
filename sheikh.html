@@ -154,8 +154,9 @@ if(typeof firebase === 'undefined'){
   $('loginMsg').innerHTML = '⚠️ مقدرتش أحمّل مكتبات الاتصال (Firebase).<br>اتأكدي من النت، أو افتحي البرنامج من Chrome/Safari مش من جوه واتساب، وبعدين <a href="" onclick="location.reload();return false">حدّثي الصفحة</a>.';
   throw new Error('firebase not loaded');
 }
-firebase.initializeApp(FIREBASE_CONFIG);
-const auth = firebase.auth(), db = firebase.firestore();
+/* جلسة دخول مستقلة لصفحات العرض (الشيخ/المعلمات) عشان متتخبطش مع حساب المختبِرة في برنامج الاختبارات */
+const FB_VIEWER = firebase.initializeApp(FIREBASE_CONFIG, 'viewer');
+const auth = FB_VIEWER.auth(), db = FB_VIEWER.firestore();
 
 $('loginBtn').onclick = async () => {
   const em = $('em').value.trim(), pw = $('pw').value;
@@ -258,7 +259,7 @@ function detailHtml(r){
   return h + '</details>';
 }
 function ayahBlocks(q){
-  const a = Array.isArray(q.ayahTexts) ? q.ayahTexts.filter(p => Array.isArray(p) && p[1]) : [];
+  const a = Array.isArray(q.ayahTexts) ? q.ayahTexts.map(p => Array.isArray(p) ? p : (p && typeof p === 'object' ? [p.n, p.t] : null)).filter(p => Array.isArray(p) && p[1]) : [];
   if(!a.length) return '';
   const nw = s => String(s || '').replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, '');
   const m = {};
@@ -489,7 +490,15 @@ $('bkBtn').addEventListener('click', () => {
   const AR = '٠١٢٣٤٥٦٧٨٩', ad = s => String(s).replace(/\d/g, d => AR[d]);
   const p2 = n => String(n).padStart(2, '0');
   const isoD = d => d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
-  const dOf = r => String(r.date || '').slice(0, 10);
+  const dOf = r => {
+    let d = r.date;
+    if(d && typeof d.toDate === 'function') d = d.toDate();
+    if(d instanceof Date) return isNaN(d) ? '' : isoD(d);
+    d = String(d == null ? '' : d).replace(/[\u0660-\u0669]/g, c => c.charCodeAt(0) - 0x0660).replace(/[\u06F0-\u06F9]/g, c => c.charCodeAt(0) - 0x06F0).trim();
+    let m = d.match(/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/); if(m) return m[1] + '-' + p2(m[2]) + '-' + p2(m[3]);
+    m = d.match(/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/); if(m) return m[3] + '-' + p2(m[2]) + '-' + p2(m[1]);
+    return d.slice(0, 10);
+  };
   const isS = r => r.app === 'surah';
   const fem = r => r.gender === 'f' || r.gender === 'أنثى' || r.gender === 'بنت';
   const passOf = r => r.status === 'ناجح';
@@ -513,9 +522,10 @@ $('bkBtn').addEventListener('click', () => {
     '#clsRepOv table,#crExp table{width:100%;border-collapse:collapse;font-size:19px;table-layout:auto}' +
     '#clsRepOv th,#clsRepOv td,#crExp th,#crExp td{border:1px solid #444;padding:8px 7px;line-height:1.5;text-align:center}' +
     '#clsRepOv th,#crExp th{background:#eadfbd;font-weight:800}' +
-    '#clsRepOv td.nm,#crExp td.nm{text-align:right;white-space:normal}' +
+    '#clsRepOv td.nm{text-align:right;white-space:nowrap}#crExp td.nm{text-align:right;white-space:normal}' +
     '#clsRepOv #crBody{width:794px;max-width:none;box-sizing:border-box}' +
     '#clsRepOv tr,#crExp tr{break-inside:avoid}' +
+    '@media print{.cr-diag{display:none!important}}' +
     '.cr-ok{color:#1a7a3c;font-weight:800}.cr-no{color:#b02a2a;font-weight:800}' +
     '@media print{html.cr-open body>*:not(#clsRepOv){display:none!important}html.cr-open body>#clsRepOv{display:block!important}#clsRepOv{position:static!important;background:#fff!important;padding:0!important;overflow:visible!important}#clsRepOv .cr-box{max-width:none!important;padding:0!important;border-radius:0!important}#clsRepOv .cr-ctl{display:none!important}#clsRepOv #crBody{width:auto!important;zoom:1!important}#clsRepOv .pg{break-after:page}#clsRepOv .pg:last-child{break-after:auto}}';
   document.head.appendChild(css);
@@ -545,7 +555,7 @@ $('bkBtn').addEventListener('click', () => {
   }
   function bodyHtml(o){
     const gs = compute(o), today = ad(new Date().toLocaleDateString('en-GB'));
-    let h = '<div class="cr-head"><div class="c">مركز الأمين الثقافي التربوي</div><div class="t">تقرير إجمالي بنتائج الفصول — ' + (o.surah ? 'اختبارات القرآن واختبار على سورة' : 'اختبارات القرآن') + '</div><div class="d">' + (o.from || o.to ? 'من ' + ad(o.from || '…') + ' إلى ' + ad(o.to || '…') + ' — ' : '') + today + '</div></div>';
+    let h = '<div class="cr-head"><div class="c">مركز الأمين الثقافي التربوي</div><div class="t">تقرير إجمالي بنتائج الفصول — ' + (o.surah ? 'اختبارات القرآن واختبار على سورة' : 'اختبارات القرآن') + '</div><div class="d">' + today + '</div></div>';
     if(!gs.length) return h + '<div style="text-align:center;padding:20px;color:#777">مفيش اختبارات تطابق الاختيار ده.</div>';
     gs.forEach((g, gi) => {
       let pass = 0, fail = 0;
@@ -559,13 +569,36 @@ $('bkBtn').addEventListener('click', () => {
       const sv = [], sj = [], ss = [];
       g.rows.forEach(r => { const v = String(r.supervisorName || '').trim(); if(v && sv.indexOf(v) < 0) sv.push(v); if(!isS(r)){ const t = subject(r); if(t && sj.indexOf(t) < 0) sj.push(t); } else { (Array.isArray(r.questions) ? r.questions : []).forEach(q => { if(q && q.surah && ss.indexOf(q.surah) < 0) ss.push(q.surah); }); } });
       h += '<div class="cr-sec' + (o.pages && gi < gs.length - 1 ? ' pg' : '') + '"><h3>الفصل: ' + esc(g.name) +
-        (sv.length ? ' <span style="color:#8A6A20">— المختبِر/ة: ' + esc(sv.join('، ')) + '</span>' : '') +
+        ' <span style="color:#8A6A20">— المحفظ/ة: ' + (sv.length ? esc(sv.join('، ').replace(/^\s*أ\s*[.\/]\s*/, '')) : 'غير محددة') + '</span>' +
         (sj.length ? ' <span style="color:#1d4f8a">— ' + esc(sj.join('، ')) + '</span>' : '') +
         (ss.length ? ' <span style="color:#1d4f8a">— السورة: ' + esc(ss.join('، ')) + '</span>' : '') +
         ' <small>(عدد الطلاب: ' + ad(g.rows.length) + ' — ناجح: ' + ad(pass) + ' — راسب: ' + ad(fail) + ')</small></h3>' +
         '<table><thead><tr><th>م</th><th>الإسم</th><th>عدد الأخطاء</th><th>الدرجة</th><th>النتيجة</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
     });
     return h;
+  }
+  function diagHtml(o){
+    const cn = r => String(r.className || '').trim() || 'بدون فصل', bad = [];
+    results.forEach(r => {
+      if(o.cls && cn(r) !== o.cls) return;
+      const d = dOf(r); let why = '';
+      if(!r.student || r.grade === '' || r.grade == null) why = 'مفيش اسم طالب أو درجة';
+      else if(!o.surah && isS(r)) why = 'اختبار على سورة (الخانة مش متعلّمة)';
+      else if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) why = 'تاريخ غير مقروء: ' + esc(r.date == null ? 'فاضي' : (r.date.toDate ? 'Timestamp' : r.date));
+      else if((o.from && d < o.from) || (o.to && d > o.to)) why = 'تاريخه ' + ad(d) + ' خارج الفترة';
+      if(why) bad.push(esc(cn(r)) + ' — ' + esc(r.student || '(بدون اسم)') + ' — ' + why);
+    });
+    let inRange = results.filter(valid); if(!o.surah) inRange = inRange.filter(r => !isS(r));
+    if(o.cls) inRange = inRange.filter(r => cn(r) === o.cls);
+    if(o.from) inRange = inRange.filter(r => dOf(r) >= o.from);
+    if(o.to) inRange = inRange.filter(r => dOf(r) <= o.to);
+    const hiddenOld = o.latest ? inRange.length - latestPerStudent(inRange).length : 0;
+    let h = '<div class="cr-diag" style="margin-top:14px;padding:10px;border:2px dashed #C7963E;border-radius:10px;background:#fffaf0;font-size:14px;line-height:1.8"><b>🔎 نتايج مش ظاهرة في التقرير (للمراجعة بس — مش بتتطبع)</b><br>';
+    h += 'إجمالي النتايج المحمّلة: ' + ad(results.length) + '<br>';
+    if(hiddenOld) h += 'اتخفى ' + ad(hiddenOld) + ' اختبار قديم لطلاب اتختبروا تاني (علامة «آخر اختبار لكل طالب بس»).<br>';
+    if(!bad.length) h += '✅ مفيش نتايج مستبعدة لسبب تاني.';
+    else h += '<b>' + ad(bad.length) + ' مستبعدة:</b><br>' + bad.slice(0, 60).map(x => '• ' + x).join('<br>') + (bad.length > 60 ? '<br>…' : '');
+    return h + '</div>';
   }
   function textReport(o){
     const gs = compute(o); if(!gs.length) return '';
@@ -617,10 +650,13 @@ $('bkBtn').addEventListener('click', () => {
     function fit(){
       const bd = g('crBody'); if(!bd) return;
       const box = bd.parentNode, cs = getComputedStyle(box), avail = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-      bd.style.zoom = '1'; bd.style.width = '794px';
-      bd.style.zoom = String(Math.min(1, avail / 794) || 1);
+      bd.style.zoom = '1'; bd.style.width = '400px';
+      let w = 400; bd.querySelectorAll('table').forEach(tb => { if(tb.offsetWidth > w) w = tb.offsetWidth; });
+      bd.style.width = w + 'px';
+      const z = Math.min(1, avail / w);
+      bd.style.zoom = z > 0 ? String(z) : '1';
     }
-    function redraw(){ g('crBody').innerHTML = bodyHtml(opts()); fit(); }
+    function redraw(){ g('crBody').innerHTML = bodyHtml(opts()) + (location.hash === '#diag' ? diagHtml(opts()) : ''); fit(); }
     const onResize = () => fit(); window.addEventListener('resize', onResize);
     function close(){ window.__crRedraw = null; window.removeEventListener('resize', onResize); ov.remove(); document.documentElement.classList.remove('cr-open'); }
     g('crClose').onclick = close;
