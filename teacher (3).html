@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>نتائج فصلي</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  *{ box-sizing:border-box; }
+  :root{ --navy:#0F2440; --gold:#C7963E; --cream:#FBF8F0; --line:#EAE1C7; --muted:#7C8A7E; --ok:#0F5132; --okbg:#DDF0E3; --bad:#A3312B; --badbg:#F6DCDA; }
+  html,body{ margin:0; min-height:100%; }
+  body{ background:var(--cream); color:var(--navy); font-family:'Cairo','Tajawal',system-ui,sans-serif; padding-bottom:env(safe-area-inset-bottom,0); }
+  header{ background:linear-gradient(160deg,#0F2440,#1E3F66); color:#F4EFDC; padding:calc(14px + env(safe-area-inset-top,0)) 16px 14px; border-bottom:3px solid var(--gold); display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  header h1{ margin:0; font-size:20px; }
+  header small{ display:block; font-size:12px; opacity:.8; direction:ltr; text-align:right; }
+  #logoutBtn{ background:rgba(255,255,255,.15); color:#fff; border:0; border-radius:999px; padding:8px 14px; font:inherit; font-size:13px; cursor:pointer; }
+  main{ max-width:720px; margin:0 auto; padding:14px; }
+  #login{ position:fixed; inset:0; z-index:10; background:linear-gradient(160deg,#0F2440,#1E3F66); display:flex; align-items:center; justify-content:center; padding:20px; }
+  #login .box{ width:100%; max-width:360px; background:var(--cream); border-radius:20px; border-top:4px solid var(--gold); padding:24px 20px; text-align:center; }
+  #login h2{ margin:0 0 4px; }
+  #login p{ margin:0 0 16px; color:var(--muted); font-size:14px; }
+  input{ width:100%; padding:12px; margin-bottom:10px; border:1.5px solid var(--line); border-radius:10px; font:inherit; font-size:16px; background:#fff; }
+  .primary{ width:100%; padding:13px; background:var(--navy); color:#F4EFDC; border:0; border-radius:10px; font:inherit; font-size:16px; font-weight:700; cursor:pointer; }
+  .primary:disabled{ opacity:.6; }
+  #loginMsg{ color:var(--bad); font-size:14px; min-height:20px; margin-top:10px; }
+  #forgot{ color:#9C6F22; font-size:13px; }
+  .chips{ display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; margin-bottom:10px; }
+  .chip{ flex:0 0 auto; border:1.5px solid var(--line); background:#fff; color:var(--navy); border-radius:999px; padding:7px 14px; font:inherit; font-size:14px; cursor:pointer; white-space:nowrap; }
+  .chip.on{ background:var(--navy); color:#F4EFDC; border-color:var(--navy); }
+  .sum{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+  .sum div{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 4px; text-align:center; font-size:13px; color:var(--muted); }
+  .sum b{ display:block; font-size:22px; color:var(--navy); }
+  .sum .g b{ color:var(--ok); } .sum .r b{ color:var(--bad); }
+  .cls{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:12px; }
+  .cls h3{ margin:0 0 6px; display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap; font-size:17px; }
+  .cls h3 span{ font-size:13px; font-weight:600; }
+  .row{ display:flex; justify-content:space-between; align-items:center; gap:8px; padding:9px 0; border-top:1px solid var(--line); }
+  .row.sub{ border-top:1px dashed var(--line); padding-inline-start:12px; }
+  .row .meta{ font-size:12px; color:var(--muted); margin-top:2px; line-height:1.6; }
+  .row .note{ font-size:12.5px; margin-top:3px; background:#FFF8E6; border-radius:8px; padding:4px 8px; }
+  .badge{ display:inline-block; border-radius:999px; padding:2px 10px; font-weight:700; font-size:13px; white-space:nowrap; }
+  .badge.ok{ background:var(--okbg); color:var(--ok); } .badge.bad{ background:var(--badbg); color:var(--bad); }
+  .score{ text-align:left; font-size:12px; color:var(--muted); }
+  .new{ display:inline-block; background:var(--bad); color:#fff; border-radius:999px; font-size:11px; padding:0 7px; margin-inline-start:6px; }
+  .empty{ text-align:center; color:var(--muted); padding:40px 10px; line-height:1.9; }
+  header{ padding-left:110px; }
+  .row{ flex-wrap:wrap; }
+  .dt{ flex:1 1 100%; margin-top:2px; }
+  .dt > summary{ cursor:pointer; list-style:none; display:inline-block; font-size:13px; font-weight:700; color:var(--navy); background:#F4EFDC; border-radius:999px; padding:3px 12px; }
+  .dt > summary::-webkit-details-marker{ display:none; }
+  .dt[open] > summary{ background:var(--navy); color:#F4EFDC; }
+  .dt .qq{ border-top:1px dashed var(--line); padding:7px 2px; font-size:13px; line-height:1.9; }
+  .dt .qq:first-of-type{ border-top:0; }
+  .dt .er{ margin:2px 0 0; padding-inline-start:4px; }
+  .dt .wd{ font-family:'UthmanicHafs','Amiri Quran','Amiri',serif; font-size:19px; color:#0F2440; }
+  .dt .sd{ font-family:'UthmanicHafs','Amiri Quran','Amiri',serif; font-size:19px; color:var(--bad); }
+  .dt .fu{ background:#F3F7FD; border:1.5px dashed #3D6AA5; border-radius:10px; padding:6px 10px; margin:6px 0; font-size:13px; line-height:1.9; color:#1F4A7A; }
+  .dt .fut{ display:inline-block; background:#EAF1FB; border:1px solid #3D6AA5; border-radius:8px; padding:0 7px; font-size:12px; font-weight:700; color:#1F4A7A; }
+  .fub{ font-size:12px; font-weight:700; color:#1F4A7A; margin-top:3px; }
+  .dt .ty{ display:inline-block; background:#F6EBD0; border:1px solid #C7963E; border-radius:8px; padding:0 7px; font-size:12px; font-weight:700; color:#5B3F0C; }
+  .dt .pb{ background:#FFF3F1; border-right:4px solid var(--bad); border-radius:6px; padding:4px 9px; margin:5px 0; font-size:13px; }
+  .dt .none{ font-size:12.5px; color:var(--muted); padding:4px 2px; }
+  .lv{ display:inline-block; border-radius:999px; padding:1px 10px; font-size:12px; font-weight:800; color:#fff; margin-inline-start:6px; }
+  .lv.g{ background:#2E6B4A; } .lv.m{ background:#B8860B; } .lv.w{ background:#A3312B; }
+  .csum{ background:#F4EFDC; border-radius:10px; padding:7px 11px; font-size:13px; line-height:1.9; margin:4px 0 6px; }
+.sec{ margin:14px 0 4px; padding:7px 12px; border-radius:10px; background:#0F2440; color:#fff; font-weight:800; font-size:14px; display:flex; justify-content:space-between; gap:8px; } .sec span{ font-weight:600; font-size:12.5px; opacity:.9; }
+  #shareBtn{ background:#C7963E; color:#0F2440; border:0; border-radius:999px; padding:8px 14px; font:inherit; font-size:13px; font-weight:800; cursor:pointer; }
+  #shareBtn:disabled{ opacity:.6; }
+  .hbtns{ display:flex; gap:8px; align-items:center; }
+  #shotBox{ position:absolute; top:0; left:0; width:430px; z-index:-1; background:#FBF8F0; pointer-events:none; }
+  #shotBox header{ padding-left:16px !important; }
+  #shotBox .cls{ margin-bottom:12px; }
+  .tools{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .tools button{ flex:1 1 140px; border:1.5px solid var(--gold); background:#fff; color:var(--navy); border-radius:12px; padding:9px 8px; font:inherit; font-size:13.5px; font-weight:800; cursor:pointer; }
+  .pm{ flex:1 1 100%; margin-top:6px; border:0; background:#E3F2E8; color:#1F5A3B; border-radius:10px; padding:7px 10px; font:inherit; font-size:13px; font-weight:800; cursor:pointer; }
+
+  .tch{ margin:16px 0 6px; padding:8px 14px; border-radius:12px; background:#1E3F66; color:#F4EFDC; font-weight:800; font-size:16px; }
+  .nlw{ border-top:1px solid var(--line); }
+  .nlw:first-of-type{ border-top:0; }
+  .nl{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 8px; padding:10px 2px; cursor:pointer; }
+  .nl .nm{ font-weight:800; font-size:16px; }
+  .nl .nr{ display:flex; align-items:center; gap:8px; }
+  .nl .nr small{ color:var(--muted); font-size:12px; }
+  .nl .nlm{ flex:1 1 100%; font-size:12px; color:var(--muted); margin-top:-4px; }
+  .nd{ padding:0 2px 10px; }
+  .nd .dt{ margin-top:0; }
+  .nd .pm{ margin-top:8px; }
+  #toast{ position:fixed; top:calc(10px + env(safe-area-inset-top,0)); left:50%; transform:translateX(-50%); z-index:30; background:#0F5132; color:#fff; border-radius:12px; padding:10px 16px; font-size:14px; font-weight:700; box-shadow:0 4px 16px rgba(0,0,0,.3); max-width:92%; text-align:center; display:none; }
+  .live{ text-align:center; color:var(--ok); font-size:12px; margin:-4px 0 8px; }
+</style>
+</head>
+<body>
+<div id="toast"></div>
+<div id="login">
+  <div class="box">
+    <div style="font-size:14px;color:#8A4B1E;font-weight:800;margin-bottom:6px">✦ مركز الأمين الثقافي التربوي ✦<div style="font-size:12px;font-weight:700">لتحفيظ القرآن الكريم</div></div><h2>📖 نتائج فصلي</h2>
+    <p>ادخلي بإيميلك لتشوفي اختبارات فصولك</p>
+    <input id="em" type="email" dir="ltr" placeholder="الإيميل" autocomplete="username">
+    <input id="pw" type="password" dir="ltr" placeholder="كلمة السر" autocomplete="current-password">
+    <button id="loginBtn" class="primary" type="button">دخول</button>
+    <div id="loginMsg"></div>
+    <a id="forgot" href="#">نسيت كلمة السر؟</a>
+  </div>
+</div>
+
+<header>
+  <div><div style="font-size:12px;color:#E8C46B;font-weight:800;margin-bottom:2px">✦ مركز الأمين الثقافي التربوي ✦<div style="font-size:11px;font-weight:700;opacity:.9">لتحفيظ القرآن الكريم</div></div><h1>📖 نتائج فصلي</h1><small id="who"></small></div>
+  <div class="hbtns"><button id="logoutBtn" type="button">خروج</button></div>
+</header>
+
+<main>
+  <div id="chips" class="chips"></div>
+  <div class="live">🟢 بيتحدّث تلقائي أول ما يتسجل اختبار لفصلك</div>
+  <div class="tools"><button id="vwBtn" type="button">🔍 عرض التفاصيل</button></div>
+  <div id="sum" class="sum"></div>
+  <div id="list"></div>
+</main>
+
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAjr3fKiGeWU2KOftf52eGogRD2OHq5mpo",
+  authDomain: "quran-tests-645cd.firebaseapp.com",
+  projectId: "quran-tests-645cd",
+  storageBucket: "quran-tests-645cd.firebasestorage.app",
+  messagingSenderId: "946216956918",
+  appId: "1:946216956918:web:1946eb27cff9772dae8dd7"
+};
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const SEEN_KEY = 'teacher:seen';
+let seen = {}, results = [], filter = 'all', first = true, unsub = null, teachersMap = {}, viewMode = 'list', isAdmin = false;
+const ADMIN_EMAILS = ['asmaa@school.com'];
+try{ viewMode = localStorage.getItem('teacher:view') === 'full' ? 'full' : 'list'; }catch(e){}
+try{ seen = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}') || {}; }catch(e){}
+
+function authErr(e){
+  const c = (e && e.code) || '';
+  if(/invalid-credential|wrong-password|user-not-found|invalid-email/.test(c)) return 'الإيميل أو كلمة السر غير صحيحة';
+  if(/too-many/.test(c)) return 'محاولات كتير، استني شوية وجرّبي تاني';
+  if(/network/.test(c)) return 'مفيش اتصال بالنت';
+  return 'حصلت مشكلة، جرّبي تاني';
+}
+
+
+// منع تكرار نفس الاختبار: لو نفس الطالب/التاريخ/الفصل/نوع الاختبار/الدرجة اتبعت أكتر من مرة (من جهازين أو حسابين) بنعرضه مرة واحدة
+const nrm = t => String(t == null ? '' : t).replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim().toLowerCase();
+function canonClasses(list){
+  const strip = c => nrm(c).replace(/^فصل\s+/, ''), isF = c => /^\s*فصل\s/.test(c || ''), pref = {};
+  list.forEach(r => { const k = strip(r.className || ''); if(!k) return; const cur = pref[k]; if(!cur || (isF(r.className) && !isF(cur))) pref[k] = r.className; });
+  list.forEach(r => { const k = strip(r.className || ''); if(pref[k]) r.className = pref[k]; });
+  return list;
+}
+function dedupe(list){
+  const m = new Map();
+  list.forEach(r => {
+    const k = r.app === 'surah'
+      ? [nrm(r.student), r.date || '', 'surah', r.grade].join('|')
+      : [nrm(r.student), r.date || '', nrm(r.className), r.app || '', nrm(r.testType), r.grade, r.hizb == null ? '' : r.hizb, r.rub || ''].join('|');
+    const cur = m.get(k);
+    if(!cur || (r.ts || 0) > (cur.ts || 0)) m.set(k, r);
+  });
+  window.__dups = list.length - m.size;
+  return Array.from(m.values());
+}
+/* جلسة دخول مستقلة لصفحات العرض (الشيخ/المعلمات) عشان متتخبطش مع حساب المختبِرة في برنامج الاختبارات */
+const FB_VIEWER = firebase.initializeApp(FIREBASE_CONFIG, 'viewer');
+const auth = FB_VIEWER.auth(), db = FB_VIEWER.firestore();
+
+$('loginBtn').onclick = async () => {
+  const em = $('em').value.trim(), pw = $('pw').value;
+  if(!em || !pw){ $('loginMsg').textContent = 'اكتبي الإيميل وكلمة السر'; return; }
+  $('loginBtn').disabled = true; $('loginMsg').textContent = 'جاري الدخول...';
+  try{ await auth.signInWithEmailAndPassword(em, pw); $('loginMsg').textContent = ''; }
+  catch(e){ $('loginMsg').textContent = authErr(e); }
+  $('loginBtn').disabled = false;
+};
+$('forgot').onclick = async ev => {
+  ev.preventDefault();
+  const em = $('em').value.trim();
+  if(!em){ $('loginMsg').textContent = 'اكتبي الإيميل الأول'; return; }
+  try{ await auth.sendPasswordResetEmail(em); $('loginMsg').textContent = 'اتبعتلك رابط تغيير كلمة السر على الإيميل'; }
+  catch(e){ $('loginMsg').textContent = authErr(e); }
+};
+$('logoutBtn').onclick = async () => { await auth.signOut(); location.reload(); };
+
+auth.onAuthStateChanged(u => {
+  if(unsub){ unsub(); unsub = null; }
+  if(!u){ $('login').style.display = 'flex'; return; }
+  $('login').style.display = 'none';
+  $('who').textContent = u.email || '';
+  isAdmin = ADMIN_EMAILS.indexOf(String(u.email || '').toLowerCase()) >= 0;
+  // كل معلمة بتشوف بس النتايج اللي ownerEmail بتاعها = إيميلها
+  unsub = db.collection('classResults')
+    .where('ownerEmail', '==', String(u.email || '').toLowerCase())
+    .onSnapshot(snap => {
+      const list = []; snap.forEach(d => { const x = d.data();
+        if(x.kind === 'roster'){ if(Array.isArray(x.teachers)) x.teachers.forEach(it => { if(it && it.c && it.t) teachersMap[clsKey(it.c)] = String(it.t).trim(); }); return; }
+        x.id = d.id; list.push(x); });
+      results = dedupe(canonClasses(list));
+      render();
+      if(!first){ const add = []; snap.docChanges().forEach(ch => { if(ch.type === 'added'){ const x = ch.doc.data(); if(x.kind !== 'roster') add.push(x); } });
+        if(add.length){ const c = [...new Set(add.map(x => x.className).filter(Boolean))]; toast('🔔 وصل اختبار جديد' + (c.length ? ': ' + c.join('، ') : '') + ' (' + AD(add.length) + ')'); } }
+      first = false;
+    }, err => {
+      $('list').innerHTML = '<div class="empty">⚠️ ماقدرتش أحمّل النتايج.<br>' +
+        (err && err.code === 'permission-denied' ? 'الصلاحيات في قاعدة البيانات مش مفعّلة للمعلمات بعد (اتأكدي من قواعد Firestore).' : 'اتأكدي من النت وجرّبي تاني.') + '</div>';
+    });
+});
+
+
+const TYPE_LABELS = {tsf:'تشكيل: فتحة', tsk:'تشكيل: كسرة', tsd:'تشكيل: ضمة', tss:'تشكيل: سكون', prn:'نطق كلمة غلط', hes:'تردد', fgt:'نسيان كلمة', swW:'تبديل: كلمة مكان كلمة', swA:'تبديل: آية مكان آية', tsh:'تشكيل', swp:'تبديل كلمة'};
+const NOTE_LABELS = {nhs:'⏳ تردد بسيط', nst:'✋ وقف على الكلمة', ncf:'🌀 تلخبط في الكلمة', nfc:'👀 عدم تركيز'};
+const FLAG_LABELS = {loose:'〰️ حفظ متلقلق / غير متقن', many:'⏳ ترددات كتيرة', conf:'🌀 تلخبط في التسميع', stop:'✋ وقفات كتيرة', focus:'👀 عدم تركيز'};
+const gflagsOf = r => { const q = (Array.isArray(r.questions) ? r.questions : [])[0]; return (q && Array.isArray(q.gflags)) ? q.gflags.filter(k => FLAG_LABELS[k]) : []; };
+const fnotesOf = r => { const o = []; (Array.isArray(r.questions) ? r.questions : []).forEach(q => { (Array.isArray(q.fnotes) ? q.fnotes : []).forEach(n => { if(n && n.w && NOTE_LABELS[n.t]) o.push({surah: q.surah || '', word: n.w, ayah: n.a || '', type: n.t}); }); }); return o; };
+const tl = t => TYPE_LABELS[t] || (t ? String(t) : 'نوع غير محدد');
+const AD = n => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+function pctOf(r){ const g = parseFloat(r.grade); if(isNaN(g) || r.grade === '' || r.grade == null) return null; return g / (r.app === 'surah' ? 10 : 100) * 100; }
+function lvlOf(p){ return p === null ? null : (p >= 95 ? {k:'g', t:'شاطر'} : {k:'w', t:'ضعيف'}); }
+function fixSaid(s){
+  s = String(s || ''); var out = [], cur = '';
+  var flush = function(){ if(!cur) return; var hasV = /[\u064B-\u0650\u08F0-\u08F2]/.test(cur); out.push(hasV ? cur.replace(/[\u0652\u06E1]/g, '') : cur); cur = ''; };
+  Array.from(s).forEach(function(ch){ if(/\p{M}/u.test(ch) && cur) cur += ch; else { flush(); cur = ch; } });
+  flush(); return out.join('');
+}
+function errsOf(r){
+  const out = [];
+  (Array.isArray(r.questions) ? r.questions : []).forEach(q => {
+    String(q.words || '').split(/\s*،\s*/).filter(Boolean).forEach((it, k) => {
+      const m = it.match(/^(.*?)\s*\(آية\s*([^)]*)\)\s*$/);
+      out.push({surah: q.surah || '', word: m ? m[1] : it, ayah: m ? m[2] : '', type: (q.wordTypes || [])[k] || '', said: fixSaid((q.wordSaid || [])[k] || '')});
+    });
+  });
+  return out;
+}
+function topN(map, n){ return Object.keys(map).map(k => [k, map[k]]).sort((a, b) => b[1] - a[1]).slice(0, n); }
+function detailHtml(r, flat){
+  if(!Array.isArray(r.questions) || !r.questions.length){
+    return (r.mistakes > 0) ? '<div class="dt"><div class="none">تفاصيل الأخطاء بالكلمات هتظهر هنا بعد ما المختبِرة تفتح برنامج الاختبارات وتتزامن النتايج.</div></div>' : '';
+  }
+  const p = pctOf(r), lv = lvlOf(p), errs = errsOf(r);
+  const tcount = {}; errs.forEach(e => { const l = tl(e.type); tcount[l] = (tcount[l] || 0) + 1; });
+  let h = flat ? '<div class="dt">' : '<details class="dt"' + ' open' + '><summary>🔍 تفاصيل الاختبار والأخطاء</summary>';
+  h += '<div style="margin:6px 0 2px;font-size:13px">' + (lv ? 'المستوى:<span class="lv ' + lv.k + '">' + lv.t + '</span> ' : '') + (p !== null ? '<span style="color:var(--muted)">(' + AD(Math.round(p)) + '٪)</span>' : '') + '</div>';
+  if(errs.length){
+    h += '<div class="pb">⚠️ ' + (r.gender === 'f' || r.gender === 'أنثى' || r.gender === 'بنت' ? 'غالب أخطائها: ' : 'غالب أخطائه: ') + topN(tcount, 3).map(x => esc(x[0]) + ' (' + AD(x[1]) + ')').join('، ') + '</div>';
+  }
+  { const _gf = gflagsOf(r), _fn = fnotesOf(r);
+    if(_gf.length || _fn.length){
+      h += '<div class="fu"><b>🔎 محتاج متابعة منكِ (مش محسوبة أخطاء)</b>';
+      if(_gf.length) h += '<div>' + _gf.map(k => '<span class="fut">' + esc(FLAG_LABELS[k]) + '</span>').join(' ') + '</div>';
+      if(_fn.length){ const by = {}; _fn.forEach(e => { (by[e.type] = by[e.type] || []).push(e); });
+        Object.keys(by).forEach(t => { h += '<div>• <span class="fut">' + esc(NOTE_LABELS[t]) + '</span> ' + by[t].map(e => '<span class="wd">' + esc(e.word) + '</span> <span style="color:var(--muted);font-size:12px">(' + esc(e.surah) + (e.ayah ? ' آية ' + esc(AD(e.ayah)) : '') + ')</span>').join('، ') + '</div>'; }); }
+      h += '</div>';
+    } }
+  r.questions.forEach(q => {
+    const items = String(q.words || '').split(/\s*،\s*/).filter(Boolean);
+    h += '<div class="qq"><b>' + esc(q.surah) + '</b>' + (q.ayahRange ? ' <span style="color:var(--muted)">(آيات ' + esc(q.ayahRange) + ')</span>' : '') + ' — ' + (q.mistakes ? 'أخطاء: <b>' + AD(q.mistakes) + '</b>' : '<span style="color:var(--ok)">بدون أخطاء ✨</span>');
+    if(items.length){
+      h += '<div class="er">' + items.map((it, k) => {
+        const m = it.match(/^(.*?)\s*\((آية\s*[^)]*)\)\s*$/), t = (q.wordTypes || [])[k] || '', s = fixSaid((q.wordSaid || [])[k] || '');
+        return '• <span class="wd">' + esc(m ? m[1] : it) + '</span>' + (m ? ' <span style="color:var(--muted);font-size:12px">(' + esc(m[2]) + ')</span>' : '') + (t ? ' <span class="ty">' + esc(tl(t)) + '</span>' : '') + (s ? ' ← قالها «<span class="sd">' + esc(s) + '</span>»' : '');
+      }).join('<br>') + '</div>';
+    }
+    h += ayahBlocks(q);
+    h += '</div>';
+  });
+  if(r.notes) h += '<div class="note" style="margin-top:4px">📝 ' + esc(r.notes) + '</div>';
+  return h + (flat ? '</div>' : '</details>');
+}
+function ayahBlocks(q){
+  const a = Array.isArray(q.ayahTexts) ? q.ayahTexts.map(p => Array.isArray(p) ? p : (p && typeof p === 'object' ? [p.n, p.t] : null)).filter(p => Array.isArray(p) && p[1]) : [];
+  if(!a.length) return '';
+  const m = {};
+  String(q.words || '').split(/\s*،\s*/).filter(Boolean).forEach(it => {
+    const mm = it.match(/^(.*?)\s*\(آية\s*([^)]*)\)\s*$/); if(!mm) return;
+    const n = parseInt(String(mm[2]).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)), 10);
+    (m[n] = m[n] || []).push(mm[1]);
+  });
+  return a.map(p => {
+    const n = Number(p[0]), ws = m[n] || [];
+    return '<div style="margin:6px 0 2px;padding:6px 10px;border:1.5px solid #A3312B;border-right:5px solid #A3312B;border-radius:10px;background:#FDF0EE;line-height:2.1">' +
+      '<span style="color:#A3312B;font-family:\'UthmanicHafs\',\'Amiri Quran\',\'Amiri\',serif;font-size:20px;font-weight:600">' + esc(String(p[1])) + ' ﴿' + AD(n) + '﴾</span>' +
+      (ws.length ? ' <span style="font-size:13px;font-weight:800;color:#5a1f1b;background:#fff;border:1px solid #A3312B;border-radius:8px;padding:1px 8px;white-space:nowrap">الغلط: ' + ws.map(esc).join('، ') + '</span>' : '') + '</div>';
+  }).join('');
+}
+function classSummary(rows){
+  const ps = rows.map(pctOf).filter(p => p !== null), c = {g: 0, m: 0, w: 0};
+  ps.forEach(p => { c[lvlOf(p).k]++; });
+  const tcount = {}; rows.forEach(r => errsOf(r).forEach(e => { const l = tl(e.type); tcount[l] = (tcount[l] || 0) + 1; }));
+  const t = topN(tcount, 3);
+  if(!ps.length && !t.length) return '';
+  return '<div class="csum">' + (ps.length ? 'متوسط الفصل: <b>' + AD(Math.round(ps.reduce((a, b) => a + b, 0) / ps.length)) + '٪</b> · <span class="lv g">شاطر ' + AD(c.g) + '</span><span class="lv w">ضعيف ' + AD(c.w) + '</span>' : '') +
+    (t.length ? '<br>أكتر أنواع الأخطاء: <b>' + t.map(x => esc(x[0]) + ' (' + AD(x[1]) + ')').join('، ') + '</b>' : '') + '</div>';
+}
+
+/* ===== عرض مختصر: المعلمة ← الفصل ← الأسماء تحت بعض وجنبها ناجح/راسب ===== */
+const clsKey = c => nrm(String(c || '').replace(/\([^)]*\)/g, '')).replace(/^فصل\s+/, '').trim();
+function toast(msg){ const t = $('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toast._t); toast._t = setTimeout(() => { t.style.display = 'none'; }, 6000); }
+function whereOf(r){
+  const sq = (r.app === 'surah' && Array.isArray(r.questions)) ? r.questions.filter(q => q && q.surah) : [];
+  const w = r.app === 'surah' ? (sq.length ? sq.map(q => 'سورة ' + q.surah).join('، ') : 'سورة جديدة') : (r.testType || '');
+  const part = [r.hizb !== '' && r.hizb != null ? 'حزب ' + r.hizb : '', r.rub ? 'ربع ' + r.rub : ''].filter(Boolean).join(' · ');
+  return [r.date || '', w, part].filter(Boolean).join(' · ');
+}
+function statusLabel(r){ const pass = r.status === 'ناجح', f = r.gender === 'f' || r.gender === 'أنثى' || r.gender === 'بنت'; return f ? (pass ? 'ناجحة' : 'راسبة') : (pass ? 'ناجح' : 'راسب'); }
+function groupRows(rows){
+  const byC = {}; rows.forEach(r => { (byC[r.className] = byC[r.className] || []).push(r); });
+  const hasT = Object.keys(teachersMap).length > 0, byT = {}, order = [];
+  Object.keys(byC).sort((a, b) => a.localeCompare(b, 'ar')).forEach(cn => {
+    const t = teachersMap[clsKey(cn)] || (hasT ? 'معلمة غير محددة' : '');
+    if(!byT[t]){ byT[t] = []; order.push(t); }
+    const m = new Map(); byC[cn].forEach(r => { const k = nrm(r.student); if(!m.has(k)) m.set(k, []); m.get(k).push(r); });
+    const stu = Array.from(m.values()); stu.forEach(g => g.sort((a, b) => (b.ts || 0) - (a.ts || 0)));
+    stu.sort((a, b) => String(a[0].student).localeCompare(String(b[0].student), 'ar'));
+    byT[t].push({name: cn, rows: byC[cn], students: stu});
+  });
+  order.sort((a, b) => a.localeCompare(b, 'ar'));
+  return order.map(t => ({teacher: t, classes: byT[t]}));
+}
+function compactHtml(rows){
+  return groupRows(rows).map(g => (g.teacher ? '<div class="tch">👩‍🏫 ' + esc(g.teacher) + '</div>' : '') + g.classes.map(c => {
+    const o = c.rows.filter(r => r.status === 'ناجح').length;
+    return '<div class="cls"><h3><span style="font-size:17px">' + esc(c.name) + '</span><span>✅ ' + AD(o) + ' ناجح · ❌ ' + AD(c.rows.length - o) + ' راسب</span></h3>' +
+      c.students.map(list => list.map(r => {
+        const pass = r.status === 'ناجح', gr = (r.grade !== '' && r.grade != null) ? AD(r.grade) + (r.app === 'surah' ? '/١٠' : '') : '';
+        return '<div class="nlw"><div class="nl"><span class="nm">' + esc(r.student) + (!seen[r.id] ? '<span class="new">جديد</span>' : '') + '</span>' +
+          '<span class="nr"><span class="badge ' + (pass ? 'ok' : 'bad') + '">' + statusLabel(r) + '</span><small>' + esc(gr) + '</small></span>' +
+          '<span class="nlm">' + esc(whereOf(r)) + '</span></div>' +
+          '<div class="nd" style="display:none">' + detailHtml(r, true) + (isAdmin ? '<button type="button" class="pm" data-id="' + esc(r.id) + '">💬 رسالة لولي الأمر</button>' : '') + '</div></div>';
+      }).join('')).join('') + '</div>';
+  }).join('')).join('');
+}
+function listText(){
+  const rows = results.filter(r => filter === 'all' || r.className === filter);
+  const L = ['📊 نتائج الاختبارات — مركز الأمين الثقافي التربوي', ''];
+  groupRows(rows).forEach(g => {
+    if(g.teacher) L.push('👩‍🏫 ' + g.teacher, '');
+    g.classes.forEach(c => {
+      const o = c.rows.filter(r => r.status === 'ناجح').length;
+      L.push('📘 ' + c.name + '  (✅ ' + o + ' · ❌ ' + (c.rows.length - o) + ')');
+      let n = 0; c.students.forEach(list => list.forEach(r => { n++; L.push(n + '. ' + r.student + ' — ' + (r.status === 'ناجح' ? '✅ ' : '❌ ') + statusLabel(r)); }));
+      L.push('');
+    });
+  });
+  return L.join('\n').trim();
+}
+
+function render(){
+  const classes = [...new Set(results.map(r => r.className).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
+  if(filter !== 'all' && !classes.includes(filter)) filter = 'all';
+
+  $('chips').innerHTML = classes.length > 1
+    ? ['all'].concat(classes).map(c => `<button type="button" class="chip ${c === filter ? 'on' : ''}" data-c="${esc(c)}">${c === 'all' ? 'كل فصولي' : esc(c)}</button>`).join('')
+    : '';
+
+  const shown = results.filter(r => filter === 'all' || r.className === filter);
+  const ok = shown.filter(r => r.status === 'ناجح').length;
+  $('sum').innerHTML = shown.length
+    ? `<div><b>${shown.length}</b>اختبار</div><div class="g"><b>${ok}</b>ناجح</div><div class="r"><b>${shown.length - ok}</b>راسب</div>`
+    : '';
+  if(shown.length && window.__dups > 0) $('sum').insertAdjacentHTML('beforeend', '<div style="grid-column:1/-1;background:none;border:0;padding:0;font-size:12px">تم إخفاء ' + window.__dups + ' نتيجة مكررة</div>');
+
+  if(!shown.length){
+    $('list').innerHTML = '<div class="empty">📭 مفيش اختبارات لفصولك لسه.<br>أول ما يتسجل اختبار لفصلك هيظهر هنا تلقائيًا.</div>';
+    return;
+  }
+  const rowHtml = (r, showName) => {
+        const pass = r.status === 'ناجح';
+        const label = r.gender === 'f' || r.gender === 'أنثى' || r.gender === 'بنت' ? (pass ? 'ناجحة' : 'راسبة') : (pass ? 'ناجح' : 'راسب');
+        const isNew = !seen[r.id];
+        const sq = (r.app === 'surah' && Array.isArray(r.questions)) ? r.questions.filter(q => q && q.surah) : [];
+        const where = r.app === 'surah'
+          ? (sq.length ? sq.map(q => 'سورة ' + q.surah + (q.ayahRange ? ' (آيات ' + q.ayahRange + ')' : '')).join('، ') : 'سورة جديدة')
+          : (r.testType || '');
+        const part = [r.hizb !== '' && r.hizb != null ? 'حزب ' + r.hizb : '', r.rub ? 'ربع ' + r.rub : ''].filter(Boolean).join(' · ');
+        return `<div class="row${showName ? '' : ' sub'}"><div>
+            ${showName ? '<b>' + esc(r.student) + '</b>' : ''}${(pctOf(r) !== null && pctOf(r) >= 95) ? '<span style="color:#2E6B4A;font-weight:800;font-size:12px"> ما شاء الله 🌟</span>' : ''}${isNew ? '<span class="new">جديد</span>' : ''}
+            <div class="meta">${esc(r.date || '')}${where ? ' · ' + esc(where) : ''}${part ? ' · ' + esc(part) : ''}${r.supervisorName ? ' · المختبِر/ة: ' + esc(r.supervisorName) : ''}${r.demotedTo ? ' · 🔻 اتنقل لـ ' + esc(r.demotedTo) : ''}</div>
+            ${r.notes ? `<div class="note">📝 ${esc(r.notes)}</div>` : ''}
+            ${(gflagsOf(r).length || fnotesOf(r).length) ? `<div class="fub">🔎 فيه ملاحظات متابعة (التفاصيل تحت)</div>` : ''}
+          </div>
+          <div class="score"><span class="badge ${pass ? 'ok' : 'bad'}">${label}</span><div>${esc(r.grade)} · أخطاء ${esc(r.mistakes || 0)}</div></div>${detailHtml(r)}${isAdmin ? `<button type="button" class="pm" data-id="${esc(r.id)}">💬 رسالة لولي الأمر</button>` : ''}</div>`;
+  };
+  const sec = (title, list) => { if(!list.length) return ''; const o = list.filter(r => r.status === 'ناجح').length;
+    return '<div class="sec">' + title + ' <span>(' + AD(list.length) + ') ✅ ' + AD(o) + ' · ❌ ' + AD(list.length - o) + '</span></div>' + classSummary(list) + stuGroups(list).map(g => g.map((r, i) => rowHtml(r, i === 0)).join('')).join(''); };
+  /* كل طالب/ة يظهر اسمه مرة واحدة وتحته كل اختباراته */
+  const stuGroups = list => { const m = new Map(); list.forEach(r => { const k = nrm(r.student); if(!m.has(k)) m.set(k, []); m.get(k).push(r); });
+    const gs = Array.from(m.values()); gs.forEach(g => g.sort((a, b) => (b.ts || 0) - (a.ts || 0)));
+    return gs.sort((a, b) => String(a[0].student).localeCompare(String(b[0].student), 'ar')); };
+  const by = {};
+  shown.forEach(r => { const key = r.className + '||x'; (by[key] = by[key] || []).push(r); });
+  const kindInfo = (rows, kd) => {
+    const set = [], add = x => { if(x && set.indexOf(x) === -1) set.push(x); };
+    rows.forEach(r => {
+      if(kd === 's'){ (Array.isArray(r.questions) ? r.questions : []).forEach(q => { if(q && q.surah) add('سورة ' + q.surah); }); }
+      else { add([r.testType || '', r.hizb !== '' && r.hizb != null ? 'حزب ' + r.hizb : '', r.rub ? 'ربع ' + r.rub : ''].filter(Boolean).join(' — ')); }
+    });
+    return set.length ? '<div class="csum"><b>' + (kd === 's' ? 'السور المختبَر فيها: ' : 'الأجزاء المختبَر فيها: ') + '</b>' + set.map(esc).join(' • ') + '</div>' : '';
+  };
+  $('list').innerHTML = viewMode === 'list' ? compactHtml(shown) : Object.keys(by).sort((a, b) => { const x = a.split('||'), y = b.split('||'); return x[0].localeCompare(y[0], 'ar') || x[1].localeCompare(y[1]); }).map(key => {
+    const cn = key.split('||')[0], kd = key.split('||')[1];
+    const rows = by[key].sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    const o = rows.filter(r => r.status === 'ناجح').length;
+    const isG = r => { const p = pctOf(r); return p !== null && p >= 95; }; const latest = {}; rows.forEach(r => { const k = nrm(r.student); if(!latest[k] || (r.ts || 0) > (latest[k].ts || 0)) latest[k] = r; });
+    const wk = rows.filter(r => !isG(latest[nrm(r.student)])), gd = rows.filter(r => isG(latest[nrm(r.student)]));
+    const sRows = rows.filter(r => r.app === 'surah'), jRows = rows.filter(r => r.app !== 'surah');
+    return `<div class="cls"><h3><span style="font-size:17px">${esc(cn)} </span><span>✅ ${o} ناجح · ❌ ${rows.length - o} راسب</span></h3>` +
+      kindInfo(sRows, 's') + kindInfo(jRows, 'j') + sec('⚠️ الضعاف (أقل من ٩٥٪)', wk) + sec('🌟 الشطار (٩٥٪ فأكثر)', gd) + '</div>';
+  }).join('');
+
+  // علّمي اللي ظهر على إنه اتشاف
+  setTimeout(() => {
+    shown.forEach(r => { seen[r.id] = 1; });
+    try{ localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); }catch(e){}
+  }, 4000);
+}
+function syncVw(){ $('vwBtn').textContent = viewMode === 'list' ? '🔍 عرض التفاصيل' : '📋 عرض مختصر'; }
+syncVw();
+$('vwBtn').addEventListener('click', () => { viewMode = viewMode === 'list' ? 'full' : 'list'; try{ localStorage.setItem('teacher:view', viewMode); }catch(e){} syncVw(); render(); });
+$('list').addEventListener('click', e => {
+  if(e.target.closest('.pm') || e.target.closest('.nd')) return;
+  const h = e.target.closest('.nl'); if(!h) return;
+  const d = h.parentNode.querySelector('.nd'); if(d) d.style.display = d.style.display === 'none' ? 'block' : 'none';
+});
+$('chips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if(!b) return;
+  filter = b.dataset.c; render();
+});
+// ===== مشاركة التقرير كصورة على واتساب =====
+function shotBlob(canvas){ return new Promise(res => canvas.toBlob(res, 'image/png')); }
+async function buildShots(){
+  const box = document.createElement('div'); box.id = 'shotBox';
+  const hd = document.querySelector('header').cloneNode(true);
+  const hb = hd.querySelector('.hbtns'); if(hb) hb.remove();
+  box.appendChild(hd);
+  const main = document.createElement('main');
+  main.style.cssText = 'padding:14px;max-width:none';
+  const f = filter !== 'all' ? '<div style="text-align:center;font-weight:800;margin-bottom:8px">' + esc(filter) + '</div>' : '';
+  main.innerHTML = f + '<div class="sum">' + $('sum').innerHTML + '</div><div>' + $('list').innerHTML + '</div>';
+  box.appendChild(main);
+  document.body.appendChild(box);
+  try{
+    if(document.fonts && document.fonts.ready) await document.fonts.ready;
+    const opt = {backgroundColor:'#FBF8F0', useCORS:true, logging:false, scrollX:0, scrollY:0, windowWidth:430};
+    const W = box.offsetWidth, H = box.offsetHeight;
+    // لو الطول كبير أوي نقسّم الصور على حدود كروت الفصول عشان الموبايل مايرفضش
+    if(W * H * 4 <= 14e6){
+      const c = await html2canvas(box, Object.assign({scale:2}, opt));
+      return [await shotBlob(c)];
+    }
+    const out = [];
+    const cards = Array.from(box.querySelectorAll('.cls'));
+    const groups = []; let cur = [], curH = 0;
+    cards.forEach(c => { const h = c.offsetHeight; if(cur.length && curH + h > 3200){ groups.push(cur); cur = []; curH = 0; } cur.push(c); curH += h; });
+    if(cur.length) groups.push(cur);
+    for(let i = 0; i < groups.length; i++){
+      const keep = new Set(groups[i]);
+      cards.forEach(c => { c.style.display = keep.has(c) ? '' : 'none'; });
+      main.querySelector('.sum').style.display = i === 0 ? '' : 'none';
+      hd.style.display = i === 0 ? '' : 'none';
+      const c = await html2canvas(box, Object.assign({scale:2}, opt));
+      out.push(await shotBlob(c));
+    }
+    return out;
+  } finally { box.remove(); }
+}
+// ===== 💬 رسالة لولي الأمر + ⬇ تصدير Excel + 💾 نسخة احتياطية =====
+const isFem = r => r.gender === 'f' || r.gender === 'أنثى' || r.gender === 'بنت';
+function parentMsg(r){
+  const f = isFem(r), p = pctOf(r), who = f ? 'الطالبة' : 'الطالب', nm = r.student || '';
+  const qs = (Array.isArray(r.questions) ? r.questions : []).filter(q => q && q.surah);
+  const where = r.app === 'surah' ? (qs.length ? 'سورة ' + qs.map(q => q.surah).join(' و') : 'سورة جديدة')
+    : [r.testType || 'القرآن', r.hizb !== '' && r.hizb != null ? 'حزب ' + AD(r.hizb) : '', r.rub ? 'ربع ' + AD(r.rub) : ''].filter(Boolean).join(' ');
+  const wrong = qs.filter(q => +q.mistakes > 0).map(q => q.surah + ' (' + (+q.mistakes === 1 ? 'خطأ واحد' : (+q.mistakes === 2 ? 'خطآن' : AD(q.mistakes) + ' أخطاء')) + ')');
+  const clean = qs.filter(q => !(+q.mistakes > 0)).map(q => q.surah);
+  const gr = 'الدرجة: ' + AD(r.grade) + (r.app === 'surah' ? ' من ١٠' : ' من ١٠٠') + ' — ' + where + (r.date ? ' (' + r.date + ')' : '') + '\n';
+  let m = 'السلام عليكم ورحمة الله وبركاته\nولي أمر ' + who + ': ' + nm + '\n\n';
+  if(p === null){ m += 'تم اختبار ' + who + ' في ' + where + '.\n'; }
+  else if(p >= 95){
+    m += 'يسرّنا إبلاغكم أن ' + who + ' اجتاز' + (f ? 'ت' : '') + ' الاختبار بتقدير ممتاز، ما شاء الله 🌟\n' + gr;
+    if(clean.length) m += 'السور بدون أخطاء: ' + clean.join('، ') + '\n';
+    if(wrong.length) m += 'السور التي فيها أخطاء: ' + wrong.join('، ') + '\n';
+    m += '\nبارك الله ' + (f ? 'فيها وزادها' : 'فيه وزاده') + ' حرصًا.\n';
+  }else if(p >= 90){
+    m += who + ' ناجح' + (f ? 'ة' : '') + ' بحمد الله، لكن ' + (f ? 'تحتاج' : 'يحتاج') + ' إلى متابعة ومراجعة في البيت.\n' + gr;
+    if(wrong.length) m += 'السور التي نرجو مراجعتها: ' + wrong.join('، ') + '\n';
+  }else{
+    m += 'نفيدكم بنتيجة اختبار ' + who + ':\n' + gr + 'المستوى: يحتاج إلى دعم ومتابعة أكبر قبل الاختبار القادم.\n';
+    if(wrong.length) m += 'السور التي فيها أخطاء: ' + wrong.join('، ') + '\n';
+    m += 'نرجو المتابعة اليومية في البيت حتى ' + (f ? 'تتقن' : 'يتقن') + ' الحفظ بإذن الله.\n';
+  }
+  return m + '\nجزاكم الله خيرًا\nمركز الأمين الثقافي التربوي لتحفيظ القرآن الكريم';
+}
+$('list').addEventListener('click', e => {
+  const b = e.target.closest('.pm'); if(!b || !isAdmin) return;
+  const r = results.find(x => String(x.id) === b.dataset.id); if(!r) return;
+  const url = 'https://wa.me/?text=' + encodeURIComponent(parentMsg(r));
+  const w = window.open(url, '_blank');
+  if(!w){ try{ navigator.clipboard.writeText(parentMsg(r)); alert('اتنسخت الرسالة، الصقيها في واتساب ✓'); }catch(_){ prompt('انسخي الرسالة:', parentMsg(r)); } }
+});
+function dlFile(name, text, mime){ const b = new Blob([text], {type: mime}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(a.href); }, 800); }
+const csvCell = c => { c = String(c == null ? '' : c); return /[",\n\r]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; };
+</script>
+</body>
+</html>
