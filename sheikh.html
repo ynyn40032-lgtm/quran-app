@@ -359,7 +359,8 @@ function render(){
     const rows = by[key].sort((a, b) => (b.ts || 0) - (a.ts || 0));
     const o = rows.filter(r => r.status === 'ناجح').length;
     const isG = r => { const p = pctOf(r); return p !== null && p >= 95; }; const wk = rows.filter(r => !isG(r)), gd = rows.filter(isG);
-    return `<div class="cls"><h3><span style="font-size:17px">${esc(cn)} <span style="font-size:13px;font-weight:700">${kd === 's' ? '🎙️ اختبار على سورة' : '📖 اختبار على جزء'}</span></span><span>✅ ${o} ناجح · ❌ ${rows.length - o} راسب</span></h3>` +
+    const indB = rows.some(r => r.individual) ? '<span style="display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;background:#efe6ff;color:#5b3a9a;margin-inline-start:4px;">🧍 فردي</span>' : '';
+    return `<div class="cls"><h3><span style="font-size:17px">${esc(cn)}${indB} <span style="font-size:13px;font-weight:700">${kd === 's' ? '🎙️ اختبار على سورة' : '📖 اختبار على جزء'}</span></span><span>✅ ${o} ناجح · ❌ ${rows.length - o} راسب</span></h3>` +
       kindInfo(rows, kd) + sec('⚠️ الضعاف (أقل من ٩٥٪)', wk) + sec('🌟 الشطار (٩٥٪ فأكثر)', gd) + '</div>';
   }).join('');
 
@@ -558,7 +559,7 @@ $('bkBtn').addEventListener('click', () => {
     if(isS(r)){ const s = []; (Array.isArray(r.questions) ? r.questions : []).forEach(q => { if(q && q.surah && s.indexOf(q.surah) < 0) s.push(q.surah); }); return s.length ? 'سورة ' + s.join('، ') : ''; }
     return [r.testType || '', r.hizb !== '' && r.hizb != null ? 'حزب ' + r.hizb : '', r.rub ? 'ربع ' + r.rub : ''].filter(Boolean).join(' — ');
   }
-  /* ===== الغايبين: طلاب كشف الفصل (اللي بيبعته برنامج الاختبارات) اللي مااتختبروش في التقرير ده ===== */
+  /* ===== الغايبين: طلاب كشف الفصل (اللي بيبعته برنامج الاختبارات) اللي مااختبروش في التقرير ده ===== */
   const nm2 = s => String(s == null ? '' : s).replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '').replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/[^\u0621-\u064A0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
   const lev1 = (x, y) => { if(x === y) return true; if(Math.abs(x.length - y.length) > 1) return false; let i = 0; while(i < x.length && i < y.length && x[i] === y[i]) i++; if(x.length === y.length) return x.slice(i + 1) === y.slice(i + 1); return x.length > y.length ? x.slice(i + 1) === y.slice(i) : y.slice(i + 1) === x.slice(i); };
   const wEq = (x, y) => x === y || (x.length >= 5 && y.length >= 5 && lev1(x, y));
@@ -609,12 +610,13 @@ $('bkBtn').addEventListener('click', () => {
       const sv = [], sj = [], ss = [];
       g.rows.forEach(r => { const v = String(r.supervisorName || '').trim(); if(v && sv.indexOf(v) < 0) sv.push(v); if(!isS(r)){ const t = subject(r); if(t && sj.indexOf(t) < 0) sj.push(t); } else { (Array.isArray(r.questions) ? r.questions : []).forEach(q => { if(q && q.surah && ss.indexOf(q.surah) < 0) ss.push(q.surah); }); } });
       h += '<div class="cr-sec' + (o.pages && gi < gs.length - 1 ? ' pg' : '') + '"><h3>الفصل: ' + esc(g.name) +
+        (g.rows.some(r => r.individual) ? ' <span style="color:#5b3a9a">— فردي</span>' : '') +
         ' <span style="color:#8A6A20">— المحفظ/ة: ' + (sv.length ? esc(sv.join('، ').replace(/^\s*أ\s*[.\/]\s*/, '')) : 'غير محددة') + '</span>' +
         (sj.length ? ' <span style="color:#1d4f8a">— ' + esc(sj.join('، ')) + '</span>' : '') +
         (ss.length ? ' <span style="color:#1d4f8a">— السورة: ' + esc(ss.join('، ')) + '</span>' : '') +
         ' <small>(عدد الطلاب: ' + ad(g.rows.length) + ' — ناجح: ' + ad(pass) + ' — راسب: ' + ad(fail) + (ab ? ' — <span style="color:#8A1F1F">غايب: ' + ad(ab.absent.length) + '</span>' : '') + ')</small></h3>' +
         '<table><thead><tr><th>م</th><th>الإسم</th><th>عدد الأخطاء</th><th>الدرجة</th><th>النتيجة</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-        (ab ? (ab.absent.length ? '<div class="cr-abs"><b>الغايبين (' + ad(ab.absent.length) + '):</b> ' + ab.absent.map((x, k) => ad(k + 1) + '. ' + esc(x.name) + (x.days ? ' <small>(غاب: ' + dayW(x.days) + (x.tested ? ' — واختبر بعدها' : '') + ')</small>' : '')).join(' &nbsp;•&nbsp; ') + '</div>' : '<div class="cr-abs ok">✅ مفيش غايبين (كل طلاب الفصل اتختبروا)</div>') : '') + '</div>';
+        (ab ? (ab.absent.length ? '<div class="cr-abs"><b>الغايبين (' + ad(ab.absent.length) + '):</b> ' + ab.absent.map((x, k) => ad(k + 1) + '. ' + esc(x.name) + (x.days ? ' <small>(غاب: ' + dayW(x.days) + (x.tested ? ' — واختبر بعدها' : '') + ')</small>' : '')).join(' &nbsp;•&nbsp; ') + '</div>' : '<div class="cr-abs ok">✅ مفيش غايبين (كل طلاب الفصل اختبروا)</div>') : '') + '</div>';
     });
     return h;
   }
@@ -636,7 +638,7 @@ $('bkBtn').addEventListener('click', () => {
     const hiddenOld = o.latest ? inRange.length - latestPerStudent(inRange).length : 0;
     let h = '<div class="cr-diag" style="margin-top:14px;padding:10px;border:2px dashed #C7963E;border-radius:10px;background:#fffaf0;font-size:14px;line-height:1.8"><b>🔎 نتايج مش ظاهرة في التقرير (للمراجعة بس — مش بتتطبع)</b><br>';
     h += 'إجمالي النتايج المحمّلة: ' + ad(results.length) + '<br>';
-    if(hiddenOld) h += 'اتخفى ' + ad(hiddenOld) + ' اختبار قديم لطلاب اتختبروا تاني (علامة «آخر اختبار لكل طالب بس»).<br>';
+    if(hiddenOld) h += 'اتخفى ' + ad(hiddenOld) + ' اختبار قديم لطلاب اختبروا تاني (علامة «آخر اختبار لكل طالب بس»).<br>';
     if(!bad.length) h += '✅ مفيش نتايج مستبعدة لسبب تاني.';
     else h += '<b>' + ad(bad.length) + ' مستبعدة:</b><br>' + bad.slice(0, 60).map(x => '• ' + x).join('<br>') + (bad.length > 60 ? '<br>…' : '');
     return h + '</div>';
@@ -649,7 +651,7 @@ $('bkBtn').addEventListener('click', () => {
     gs.forEach(g => {
       let ok = 0; g.rows.forEach(r => { if(passOf(r)) ok++; });
       const ab = (AB[g.name] && !abShown[g.name]) ? (abShown[g.name] = AB[g.name]) : null;
-      t += '\n*الفصل: ' + g.name + (kinds[g.name].size > 1 ? (isS(g.rows[0]) ? ' — اختبار على سورة' : ' — اختبار على جزء') : '') + '* (ناجح ' + ad(ok) + ' — راسب ' + ad(g.rows.length - ok) + (ab ? ' — غايب ' + ad(ab.absent.length) : '') + ')\n';
+      t += '\n*الفصل: ' + g.name + (g.rows.some(r => r.individual) ? ' — فردي' : '') + (kinds[g.name].size > 1 ? (isS(g.rows[0]) ? ' — اختبار على سورة' : ' — اختبار على جزء') : '') + '* (ناجح ' + ad(ok) + ' — راسب ' + ad(g.rows.length - ok) + (ab ? ' — غايب ' + ad(ab.absent.length) : '') + ')\n';
       g.rows.forEach((r, i) => { const n = Number(r.grade); t += ad(i + 1) + '. ' + r.student + ' — ' + (isNaN(n) ? r.grade : ad(n) + '/' + ad(isS(r) ? 10 : 100)) + ' — ' + (passOf(r) ? (fem(r) ? 'ناجحة' : 'ناجح') : (fem(r) ? 'راسبة' : 'راسب')) + '\n'; });
       if(ab && ab.absent.length) t += '*الغايبين (' + ad(ab.absent.length) + '):* ' + ab.absent.map(x => x.name + (x.days ? ' (غاب ' + dayW(x.days) + ')' : '')).join('، ') + '\n';
     });
@@ -657,19 +659,60 @@ $('bkBtn').addEventListener('click', () => {
   }
 
   /* زرار الرجوع في الموبايل بيقفل التقرير بس (مش بيخرج من الصفحة) */
+  const OV_STACK = []; let OV_SKIP = 0;
+  window.addEventListener('popstate', e => { if(OV_SKIP > 0){ OV_SKIP--; e.stopImmediatePropagation(); } });
   function overlayBack(closeUI){
-    let done = false;
+    let done = false; const tok = {}; OV_STACK.push(tok);
     try{ history.pushState({shkOv: 1}, ''); }catch(e){}
-    const onPop = () => { if(done) return; done = true; window.removeEventListener('popstate', onPop); closeUI(); };
+    const drop = () => { const i = OV_STACK.indexOf(tok); if(i >= 0) OV_STACK.splice(i, 1); };
+    const onPop = () => { if(done || OV_STACK[OV_STACK.length - 1] !== tok) return; done = true; drop(); window.removeEventListener('popstate', onPop); closeUI(); };
     window.addEventListener('popstate', onPop);
     return () => {
-      if(done) return; done = true; window.removeEventListener('popstate', onPop);
+      if(done) return; done = true; drop(); window.removeEventListener('popstate', onPop);
       closeUI();
-      try{ if(history.state && history.state.shkOv) history.back(); }catch(e){}
+      try{ if(history.state && history.state.shkOv){ OV_SKIP++; history.back(); } }catch(e){}
     };
   }
   const TOPBAR_CSS = 'position:sticky;top:0;z-index:5;display:flex;margin:-4px 0 10px;';
   const TOPBTN = id => '<div style="' + TOPBAR_CSS + '"><button type="button" id="' + id + '" style="flex:1;font:inherit;font-weight:800;font-size:16px;border:0;border-radius:12px;padding:12px;background:#C7963E;color:#0F2440;box-shadow:0 2px 8px rgba(0,0,0,.3)">✕ إغلاق والرجوع للصفحة الرئيسية</button></div>';
+
+
+  /* قايمة اختيار فيها خانة بحث فوق (بدل القايمة العادية) */
+  function searchable(sel, ph){
+    if(!sel || sel.__srch) return; sel.__srch = true;
+    const btn = document.createElement('button'); btn.type = 'button';
+    btn.style.cssText = 'font:inherit;padding:6px 10px;border:1px solid #aaa;border-radius:8px;background:#fff;min-height:36px;min-width:130px;text-align:right;display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;color:#111';
+    const sync = () => { const o = sel.options[sel.selectedIndex]; btn.innerHTML = '<span>' + esc(o ? o.textContent : '') + '</span><span aria-hidden="true">▾</span>'; };
+    sel.__sync = sync; sel.style.display = 'none'; sel.parentNode.insertBefore(btn, sel.nextSibling); sync();
+    sel.addEventListener('change', sync);
+    try{ new MutationObserver(sync).observe(sel, {childList: true}); }catch(e){}
+    btn.onclick = () => {
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;direction:rtl;font-family:Cairo,Tahoma,Arial,sans-serif';
+      const box = document.createElement('div');
+      box.style.cssText = 'background:#fafafa;width:100%;max-width:560px;max-height:88vh;border-radius:20px 20px 0 0;display:flex;flex-direction:column;overflow:hidden';
+      box.innerHTML = '<div style="padding:10px 12px;display:flex;gap:8px;border-bottom:1px solid #ddd"><input type="search" id="srchQ" placeholder="' + esc(ph || '🔎 بحث') + '" autocomplete="off" style="flex:1;font:inherit;font-size:17px;padding:10px 12px;border:1.5px solid #C7963E;border-radius:12px;min-width:0"><button type="button" id="srchX" style="font:inherit;font-weight:800;border:0;border-radius:12px;padding:0 14px;background:#eee;color:#0F2440">إغلاق</button></div><div id="srchL" style="overflow-y:auto"></div>';
+      ov.appendChild(box); document.body.appendChild(ov);
+      const list = box.querySelector('#srchL'), qi = box.querySelector('#srchQ');
+      const close = overlayBack(() => ov.remove());
+      const draw = () => {
+        const k = nrm(qi.value), cur = sel.value; let n = 0;
+        list.innerHTML = '';
+        [...sel.options].forEach(o => {
+          if(k && nrm(o.textContent).indexOf(k) < 0) return; n++;
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;flex-direction:row;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid #ddd;font-size:19px;color:#111;cursor:pointer';
+          row.innerHTML = '<span>' + esc(o.textContent) + '</span><span style="width:22px;height:22px;border-radius:50%;border:2.5px solid ' + (o.value === cur ? '#0F2440' : '#555') + ';box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;flex:none">' + (o.value === cur ? '<span style="width:11px;height:11px;border-radius:50%;background:#0F2440"></span>' : '') + '</span>';
+          row.onclick = () => { sel.value = o.value; sync(); close(); sel.dispatchEvent(new Event('change', {bubbles: true})); };
+          list.appendChild(row);
+        });
+        if(!n) list.innerHTML = '<div style="padding:24px;text-align:center;color:#777;font-weight:700">مفيش نتيجة بالاسم ده</div>';
+      };
+      qi.oninput = draw; box.querySelector('#srchX').onclick = close;
+      ov.onclick = e => { if(e.target === ov) close(); };
+      draw(); setTimeout(() => { try{ qi.focus(); }catch(e){} }, 50);
+    };
+  }
 
   function openReport(){
     const old = $('clsRepOv'); if(old){ if(window.__crCloser) window.__crCloser(); else old.remove(); }
@@ -748,7 +791,8 @@ $('bkBtn').addEventListener('click', () => {
     ['change', 'input'].forEach(ev => g('crDay').addEventListener(ev, () => { const d = g('crDay').value; if(!d) return; auto = false; g('crFrom').value = d; g('crTo').value = d; g('crWeekSel').value = ''; g('crDaySel').value = [...g('crDaySel').options].some(o => o.value === d) ? d : ''; redraw(); }));
     g('crAll').onclick = () => { g('crDaySel').value = ''; g('crWeekSel').value = ''; auto = true; fillRange(); redraw(); };
     ['crCls', 'crLatest', 'crPages', 'crSurah'].forEach(id => g(id).addEventListener('change', redraw));
-    g('crBr').addEventListener('change', () => { g('crCls').value = ''; redraw(); });
+    g('crBr').addEventListener('change', () => { g('crCls').value = ''; if(g('crCls').__sync) g('crCls').__sync(); redraw(); });
+    searchable(g('crCls'), '🔎 بحث باسم الفصل');
     // افتراضي: الأسبوع الحالي
     g('crWeekSel').value = ''; fillRange();
     redraw();
@@ -757,6 +801,7 @@ $('bkBtn').addEventListener('click', () => {
       const v = sel.value, nn = [...new Set(results.filter(valid).map(r => String(r.className || '').trim() || 'بدون فصل'))].sort((a, b) => a.localeCompare(b, 'ar'));
       sel.innerHTML = '<option value="">كل الفصول</option>' + nn.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('');
       sel.value = nn.indexOf(v) >= 0 ? v : '';
+      if(sel.__sync) sel.__sync();
       const bsel = g('crBr'), bv = bsel.value, bb = [...new Set(results.filter(valid).map(r => String(r.branch || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
       bsel.innerHTML = '<option value="">كل الفروع</option>' + bb.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('');
       bsel.value = bb.indexOf(bv) >= 0 ? bv : '';
@@ -852,18 +897,33 @@ $('bkBtn').addEventListener('click', () => {
     const now = new Date(), ym = now.getFullYear() + '-' + p2(now.getMonth() + 1);
     const list = latestPerStudent(results.filter(valid).filter(r => dOf(r).slice(0, 7) === ym));
     const T = {};
-    /* محفظة الفصل (من الجدول اللي بيبعته برنامج الاختبارات) — بتجمّع فصولها سواء اتختبرت على جزء أو سورة، مش حسب المختبِرة */
+    /* محفظة الفصل (من الجدول اللي بيبعته برنامج الاختبارات) — بتجمّع فصولها سواء اختبرت على جزء أو سورة، مش حسب المختبِرة */
     const TM = []; rosters.forEach(x => (Array.isArray(x.teachers) ? x.teachers : []).forEach(i => { if(i && i.c && i.t) TM.push(i); }));
     const teacherOf = r => {
       const k = clsKey(r.className), m = TM.filter(i => clsKey(i.c) === k); if(!m.length) return null;
-      const br = brOf(r), pick = m.find(i => br && String(i.b || '').trim() === br) || m[0];
-      return String(pick.t).trim().replace(/^\s*أ\s*[.\/]\s*/, '') || null;
+      const bk = x => nrm(String(x || '').replace(/^\s*فرع\s+/, '')), br = bk(brOf(r));
+      const mb = br ? m.filter(i => bk(i.b) === br) : [];
+      /* الاختبار مسجّل في فرع معيّن والجدول مفيهوش الفصل ده في الفرع ده (بس في فرع تاني): مانخدش محفظة فرع تاني، نعتمد على اسم المحفظة المكتوب في الاختبار */
+      if(br && !mb.length && m.some(i => bk(i.b))) return null;
+      const cand = mb.length ? mb : m;
+      const names = []; cand.forEach(i => { const n = canonT(i.t); if(n && !names.some(x => nrm(x) === nrm(n))) names.push(n); });
+      if(names.length === 1) return names[0];
+      /* نفس اسم الفصل عند أكتر من محفظة ومعرفناش الفرع: ناخد اللي مكتوب في الاختبار لو موجود في الجدول، وإلا مانخمنش */
+      const sp = nrm(cleanT(r.supervisorName)); const hit = names.find(x => nrm(x) === sp);
+      return hit || null;
     };
+    /* لو نفس اسم المحفظة في أكتر من فرع (زي هاجر): بنكتب جنب الاسم اسم الفرع عشان يتفرقوا */
+    const BSET = {};
+    results.filter(valid).forEach(r => { const n = teacherOf(r) || tName(r), b = brOf(r); if(!b) return; (BSET[nrm(n)] = BSET[nrm(n)] || {})[b] = 1; });
+    const labT = r => { const n = teacherOf(r) || tName(r), b = brOf(r), bs = BSET[nrm(n)]; return (b && bs && Object.keys(bs).length > 1) ? n + ' — ' + (/^فرع\s/.test(b) ? b : 'فرع ' + b) : n; };
     list.forEach(r => {
-      const t = teacherOf(r) || tKey(r);
+      const t = labT(r);
       const c = String(r.className || '').trim() || 'بدون فصل';
-      const kd = isS(r) ? 's' : 'j', tt = T[t] = T[t] || {}, cc = tt[c + '\u0001' + kd] = tt[c + '\u0001' + kd] || {name: c, kind: kd, pass: 0, fail: 0, subs: []};
+      const kd = isS(r) ? 's' : 'j', tt = T[t] = T[t] || {}, cc = tt[c + '\u0001' + kd] = tt[c + '\u0001' + kd] || {name: c, kind: kd, pass: 0, fail: 0, subs: [], dates: [], tn: teacherOf(r) || tName(r), sups: [], ind: false};
+      if(r.individual) cc.ind = true;
       if(passOf(r)) cc.pass++; else cc.fail++;
+      { const sv = canonT(r.supervisorName); if(sv && cc.sups.indexOf(sv) < 0) cc.sups.push(sv); }
+      { const dd = dOf(r); if(dd && cc.dates.indexOf(dd) < 0) cc.dates.push(dd); }
       try{ const sb = subject(r); if(sb && cc.subs.indexOf(sb) < 0) cc.subs.push(sb); }catch(e){}
     });
     return {month: MONTHS[now.getMonth()] + ' ' + ad(now.getFullYear()), T};
@@ -878,8 +938,8 @@ $('bkBtn').addEventListener('click', () => {
     const close = overlayBack(() => { ov.remove(); window.__tcRefresh = null; window.__tcCloser = null; }); window.__tcCloser = close;
     function showList(){
       cur = null;
-      box.innerHTML = TOPBTN('tcClose2') + '<h2>👩‍🏫 المحفظات — شهر ' + esc(D.month) + '</h2><div class="tc-sub">الفصول اللي اتختبرت الشهر ده</div>' +
-        (names.length ? names.map((n, i) => { const cs = Object.keys(D.T[n]), nf = cs.filter(c => D.T[n][c].fail).length; return '<button type="button" class="tc-t" data-i="' + i + '"><span>' + esc(n) + '</span><small>' + ad(cs.length) + ' فصل' + (nf ? ' · ' + ad(nf) + ' راسب' : ' · كلها ناجحة') + '</small></button>'; }).join('') : '<div style="text-align:center;padding:20px;color:#777">مفيش فصول اتختبرت الشهر ده لسه.</div>') +
+      box.innerHTML = TOPBTN('tcClose2') + '<h2>👩‍🏫 المحفظات — شهر ' + esc(D.month) + '</h2><div class="tc-sub">الفصول اللي اختبرت الشهر ده</div>' +
+        (names.length ? names.map((n, i) => { const cs = Object.keys(D.T[n]), nf = cs.filter(c => D.T[n][c].fail).length; return '<button type="button" class="tc-t" data-i="' + i + '"><span>' + esc(n) + '</span><small>' + ad(cs.length) + ' فصل' + (nf ? ' · ' + ad(nf) + ' راسب' : ' · كلها ناجحة') + '</small></button>'; }).join('') : '<div style="text-align:center;padding:20px;color:#777">مفيش فصول اختبرت الشهر ده لسه.</div>') +
         '<button type="button" class="tc-b" id="tcClose">إغلاق</button>';
       box.querySelectorAll('.tc-t').forEach(b => { b.onclick = () => showTeacher(names[+b.dataset.i]); });
       box.querySelector('#tcClose').onclick = close; box.querySelector('#tcClose2').onclick = close;
@@ -887,9 +947,9 @@ $('bkBtn').addEventListener('click', () => {
     function showTeacher(n){
       cur = n;
       const cs = Object.keys(D.T[n]).sort((a, b) => D.T[n][a].name.localeCompare(D.T[n][b].name, 'ar') || (D.T[n][a].kind === 's' ? 1 : 0) - (D.T[n][b].kind === 's' ? 1 : 0)), nf = cs.filter(c => D.T[n][c].fail).length;
-      box.innerHTML = TOPBTN('tcClose2') + '<h2>' + esc(n) + ' — شهر ' + esc(D.month) + '</h2><div class="tc-sub">الفصول اللي اتختبرت الشهر ده</div>' +
+      box.innerHTML = TOPBTN('tcClose2') + '<h2>' + esc(n) + ' — شهر ' + esc(D.month) + '</h2><div class="tc-sub">الفصول اللي اختبرت الشهر ده</div>' +
         (nf ? '<div class="tc-sum">عدد الفصول: ' + ad(cs.length) + ' — الراسب منها: ' + ad(nf) + '</div>' : '<div class="tc-all">✅ كل الفصول ناجحة (' + ad(cs.length) + ' فصل)</div>') +
-        cs.map(c => { const x = D.T[n][c], sur = x.kind === 's'; return '<div class="tc-c' + (x.fail ? ' bad' : '') + '"><span><b>' + esc(x.name) + '</b> <span style="display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;margin-inline-start:4px;' + (sur ? 'background:#e6efff;color:#1d4f8a' : 'background:#f6ecd2;color:#8A6A20') + '">' + (sur ? '📖 اختبار على سورة' : '📚 اختبار على جزء') + '</span>' + (x.subs.length ? '<br><small style="color:#777;font-weight:600">' + esc(x.subs.join('، ')) + '</small>' : '') + '</span><span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">' + (x.fail ? 'راسب' : 'ناجح') + '</span></div>'; }).join('') +
+        cs.map(c => { const x = D.T[n][c], sur = x.kind === 's'; return '<div class="tc-c' + (x.fail ? ' bad' : '') + '"><span><b>' + esc(x.name) + '</b>' + (x.ind ? '<span style="display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;background:#efe6ff;color:#5b3a9a;margin-inline-start:4px;">🧍 فردي</span>' : '') + ' <span style="display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;margin-inline-start:4px;' + (sur ? 'background:#e6efff;color:#1d4f8a' : 'background:#f6ecd2;color:#8A6A20') + '">' + (sur ? '📖 اختبار على سورة' : '📚 اختبار على جزء') + '</span>' + (x.subs.length ? '<br><small style="color:#777;font-weight:600">' + esc(x.subs.join('، ')) + '</small>' : '') + (x.sups.some(v => nrm(v) !== nrm(x.tn)) ? '<br><small style="color:#b02a2a;font-weight:700">⚠️ المكتوب في «اسم المحفظ/ة» وقت الاختبار: ' + esc(x.sups.join('، ')) + '</small>' : '') + (x.dates.length ? '<br><small style="color:#555;font-weight:700">🗓️ تاريخ الاختبار: ' + esc(x.dates.slice().sort().map(d => ad(d.slice(8) + '/' + d.slice(5, 7))).join('، ')) + '</small>' : '') + '</span>' + (x.ind ? '<span style="text-align:center;font-weight:800;line-height:1.5"><span style="color:#555;font-size:13px">' + ad(x.pass + x.fail) + ' طالب/ة</span><br><span class="tc-ok">✅ ' + ad(x.pass) + ' ناجح</span><br><span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">❌ ' + ad(x.fail) + ' راسب</span></span>' : '<span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">' + (x.fail ? 'راسب' : 'ناجح') + '</span>') + '</div>'; }).join('') +
         '<button type="button" class="tc-b" id="tcBack">↩ كل المحفظات</button><button type="button" class="tc-b" id="tcClose">إغلاق</button>';
       box.querySelector('#tcBack').onclick = showList;
       box.querySelector('#tcClose').onclick = close; box.querySelector('#tcClose2').onclick = close;
@@ -925,10 +985,25 @@ $('bkBtn').addEventListener('click', () => {
     '@media print{html.tr-open body>*:not(#trOv){display:none!important}html.tr-open body>#trOv{display:block!important}#trOv{position:static!important;background:#fff!important;padding:0!important;overflow:visible!important}#trOv .tr-noprint{display:none!important}}';
   document.head.appendChild(trCss);
 
-  const TR = {tab: 'tst', from: '', to: '', br: '', mon: '', cls: '', stu: '', text: ''};
+  const TR = {tab: 'atq', from: '', to: '', br: '', mon: '', cls: '', stu: '', text: ''};
   const AR_ = (a, b) => String(a).localeCompare(String(b), 'ar');
   const pctOf = r => { const n = Number(r.grade); return isNaN(n) ? null : (isS(r) ? n * 10 : n); };
-  const tName = r => String(r.supervisorName || '').trim().replace(/^\s*أ\s*[.\/]\s*/, '') || 'غير محددة';
+  /* نفس المحفظة بإملاء مختلف (أسماء/اسماء، مسافات، «أ.») = اسم واحد: بنختار الشكل الأكتر استخدامًا */
+  let _cmRes = null, _cmMap = {};
+  const cleanT = n => String(n || '').replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '').trim().replace(/^\s*أ\s*[.\/]\s*/, '').replace(/\s+/g, ' ');
+  function canonT(n){
+    n = cleanT(n); if(!n) return '';
+    if(_cmRes !== results){
+      _cmRes = results; const cnt = {};
+      const add = x => { x = cleanT(x); if(!x) return; const k = nrm(x); (cnt[k] = cnt[k] || {}); cnt[k][x] = (cnt[k][x] || 0) + 1; };
+      results.forEach(r => add(r.supervisorName));
+      rosters.forEach(x => (Array.isArray(x.teachers) ? x.teachers : []).forEach(i => { if(i) add(i.t); }));
+      _cmMap = {};
+      Object.keys(cnt).forEach(k => { _cmMap[k] = Object.keys(cnt[k]).sort((a, b) => cnt[k][b] - cnt[k][a])[0]; });
+    }
+    return _cmMap[nrm(n)] || n;
+  }
+  const tName = r => canonT(r.supervisorName) || 'غير محددة';
   const cName = r => String(r.className || '').trim() || 'بدون فصل';
   const brOf = r => String(r.branch || '').trim();
   /* اسم المحفظة: لو نفس الاسم في أكتر من فرع، بيتكتب جنبه اسم الفرع عشان يتفرقوا */
@@ -1096,26 +1171,64 @@ $('bkBtn').addEventListener('click', () => {
     return {h: h, t: t.join('\n')};
   }
 
-  /* 🧪 تقرير كل اختبار: تقرير مستقل لكل اختبار بيوصل (بيتحدّث لحظيًا مع وصول أي اختبار جديد) */
-  function trTst(){
-    const rows = trRange().slice().sort((a, b) => (b.ts || 0) - (a.ts || 0) || (dOf(b) < dOf(a) ? -1 : 1)), per = trPer();
-    if(!rows.length) return {h: hero('🧪 تقرير كل اختبار', per) + '<div class="tr-mut">مفيش اختبارات في الفترة دي. غيّري التاريخ فوق.</div>', t: ''};
-    const okN = rows.filter(passOf).length;
-    let h = hero('🧪 تقرير كل اختبار', per) + kp([[ad(rows.length), 'اختبار'], [ad(okN), 'ناجح', 'g'], [ad(rows.length - okN), 'راسب', rows.length - okN ? 'r' : 'g']]);
-    const t = HEADT('🧪 تقرير كل اختبار', per); t.push('عدد الاختبارات: ' + ad(rows.length) + ' — ناجح ' + ad(okN) + ' — راسب ' + ad(rows.length - okN));
+  /* 🧾 تقرير بعد كل اختبار: الراسبون بس، وجنب كل طالب كلماته الغلط — اختبارات القرآن لوحدها واختبار السورة لوحده */
+  function trAft(sur){
+    const per = trPer(), kindName = sur ? 'اختبار على سورة' : 'اختبارات القرآن';
+    const rows = latestPerStudent(trRange().filter(r => !!isS(r) === !!sur));
+    const title = '🧾 تقرير بعد كل اختبار';
+    if(!rows.length) return {h: hero(title, kindName + ' — ' + per) + '<div class="tr-mut">مفيش ' + (sur ? 'اختبارات سورة' : 'اختبارات قرآن') + ' في الفترة دي. غيّري التاريخ فوق.</div>', t: ''};
+    const G = {};
     rows.forEach(r => {
-      const p = pctOf(r), ok = passOf(r), sur = isS(r), errs = errsOf(r);
-      const what = sur ? (subject(r) || 'اختبار سورة') : (subject(r) || r.testType || 'اختبار جزء');
-      const sub = [dLbl(dOf(r)), '📘 ' + cName(r) + kindTxt(sur), '👩‍🏫 ' + tName(r), brOf(r) ? 'فرع ' + brOf(r) : '', what].filter(Boolean).join(' • ');
-      h += '<div class="tr-t"><div class="tr-th' + (ok ? '' : ' bad') + '"><div class="tr-cn"><span>👤 ' + esc(r.student) + '</span><span class="bg ' + (ok ? 'ok' : 'bad') + '">' + (ok ? '✅ ناجح' : '⚠️ راسب') + ' — ' + grTxt(p, sur) + '</span></div><div class="tr-sm">' + esc(sub) + '</div></div>' +
-        '<div class="tr-c"><div class="tr-sm">عدد الأخطاء: <b>' + ad(r.mistakes || 0) + '</b></div>' + (typeof detailHtml === 'function' ? detailHtml(r) : '') + '</div></div>';
-      t.push('', '━━━━━━━━━━', '👤 ' + r.student + ' — ' + (ok ? '✅ ناجح' : '❌ راسب') + ' — ' + grTxt(p, sur), sub, 'عدد الأخطاء: ' + ad(r.mistakes || 0));
-      if(errs.length){
-        const by = {}; errs.forEach(e => { const l = tl(e.type); by[l] = (by[l] || 0) + 1; });
-        t.push('أنواع الأخطاء: ' + topN(by, 4).map(x => x[0] + ' (' + ad(x[1]) + ')').join('، '));
-        errs.slice(0, 15).forEach(e => t.push('   • ' + e.word + (e.ayah ? ' (' + e.surah + ' آية ' + ad(e.ayah) + ')' : '')));
-      }
-      if(r.notes) t.push('📝 ' + r.notes);
+      const tn = tKey(r), cn = cName(r);
+      const t = G[tn] = G[tn] || {name: tn, C: {}};
+      const c = t.C[cn] = t.C[cn] || {name: cn, br: brOf(r), all: 0, fails: [], subs: []};
+      c.all++;
+      const sb = subject(r); if(sb && c.subs.indexOf(sb) < 0) c.subs.push(sb);
+      if(!passOf(r)) c.fails.push(r);
+    });
+    const tl_ = Object.keys(G).map(k => G[k]).filter(t => Object.keys(t.C).some(k => t.C[k].fails.length));
+    const nFail = tl_.reduce((x, t) => x + Object.keys(t.C).reduce((y, k) => y + t.C[k].fails.length, 0), 0);
+    const nCls = tl_.reduce((x, t) => x + Object.keys(t.C).filter(k => t.C[k].fails.length).length, 0);
+    const noteKey = 'shk_tn|' + (sur ? 's' : 'j') + '|' + TR.from + '|' + TR.to;
+    let saved = ''; try{ saved = localStorage.getItem(noteKey) || ''; }catch(e){}
+    let h = hero(title, kindName + ' — ' + per) + kp([[ad(nFail), 'لم يجتز بعد', nFail ? 'r' : 'g'], [ad(nCls), 'فصل'], [ad(tl_.length), 'محفظة']]);
+    const t = HEADT(title + ' — ' + kindName, per);
+    h += '<style>.tr-pr{display:none}@media print{.tr-ta{display:none!important}.tr-pr{display:block!important;white-space:pre-wrap;border:1px solid #C7963E;border-radius:8px;padding:8px;font-size:14px}}.tr-at{width:100%;border-collapse:collapse;font-size:14px;margin:0}.tr-at th{background:#F6EBD0;color:#0F2440;border:1px solid #8f8565;padding:6px;text-align:right}.tr-at td{border:1px solid #8f8565;padding:6px 8px;vertical-align:top;text-align:right}.tr-at td.g{text-align:center;font-weight:800;color:#A3312B;white-space:nowrap}.tr-at td.nm{font-weight:800}.tr-at .ty{display:inline-block;border:1px solid #C7963E;background:#fbf1d6;border-radius:999px;padding:0 8px;font-size:11.5px;color:#7a4b00;margin-inline-start:4px}.tr-at .nt td{background:#EEF2F7;color:#1F4A7A;font-weight:700}</style>';
+    h += '<div class="tr-sm" style="font-weight:800;margin:6px 0 2px">📝 ملاحظات</div><textarea class="tr-ta" data-nk="' + esc(noteKey) + '" placeholder="اكتبي ملاحظاتك هنا..." style="display:block;width:100%;min-height:90px;font:inherit;font-size:15px;box-sizing:border-box;border:1px solid #C7963E;border-radius:8px;padding:8px">' + esc(saved) + '</textarea><div class="tr-pr">' + esc(saved) + '</div>';
+    if(!tl_.length){
+      h += '<div class="tr-mut">🎉 مفيش راسبين في الفترة دي — كل الطلاب اجتازوا.</div>';
+      t.push('🎉 مفيش راسبين في الفترة دي');
+      return {h: h, t: t.join('\n')};
+    }
+    tl_.sort((a, b) => AR_(a.name, b.name));
+    tl_.forEach(tc => {
+      const cls = Object.keys(tc.C).map(k => tc.C[k]).filter(c => c.fails.length).sort((a, b) => AR_(a.name, b.name));
+      h += '<div class="tr-t"><div class="tr-f bad" style="text-align:center;font-size:15px;background:#F6EBD0;color:#7A1F18">أسماء الأولاد الذين لم يجتازوا الاختبار بعد</div><div class="tr-th" style="background:#0F2440;color:#fff">👩‍🏫 المحفظة: ' + esc(tc.name) + '</div>';
+      t.push('', '━━━━━━━━━━', '📌 أسماء الأولاد الذين لم يجتازوا الاختبار بعد', '👩‍🏫 المحفظة: ' + tc.name);
+      cls.forEach(c => {
+        const lbl = (sur ? '📖 السورة: ' : '📖 الجزء: ') + (c.subs.join('، ').replace(/^سورة\s+/, '') || '—');
+        h += '<div class="tr-c" style="padding:0"><div style="background:#E8F0FA;padding:6px 12px;font-weight:800;font-size:13.5px;color:#0F2440">📘 الفصل: ' + esc(c.name) + ' • ' + esc(lbl) + ' <span class="tr-sm">(' + ad(c.fails.length) + ' راسب من ' + ad(c.all) + ')</span></div>';
+        t.push('', '📘 الفصل: ' + c.name + ' — ' + lbl);
+        h += '<div style="overflow-x:auto"><table class="tr-at"><thead><tr><th>الاسم</th><th>الدرجة</th><th>الكلمة الصح</th><th>الكلمة الغلط</th></tr></thead><tbody>';
+        t.push('   الاسم — الدرجة — الكلمة الصح — الكلمة الغلط');
+        c.fails.slice().sort((x, y) => (pctOf(x) === null ? 101 : pctOf(x)) - (pctOf(y) === null ? 101 : pctOf(y))).forEach(r => {
+          let er = errsOf(r); if(!er.length) er = [{word: r.mistakes > 0 ? 'عدد الأخطاء ' + ad(r.mistakes) : '—', said: '', ayah: '', surah: '', type: ''}];
+          const nt = fnotesOf(r), span = er.length + (nt.length ? 1 + nt.length : 0), gr = grTxt(pctOf(r), sur);
+          er.forEach((x, i) => {
+            h += '<tr>' + (i === 0 ? '<td class="nm" rowspan="' + span + '">' + esc(r.student) + '</td><td class="g" rowspan="' + span + '">' + esc(gr) + '</td>' : '') +
+              '<td style="font-weight:700">' + esc(x.word) + (x.ayah ? ' <span class="tr-sm">(' + (!sur && x.surah ? esc(x.surah) + ' · ' : '') + 'آية ' + esc(ad(x.ayah)) + ')</span>' : '') + '</td>' +
+              '<td style="color:#A3312B;font-weight:700">' + (x.said ? esc(x.said) : (x.type ? '' : '—')) + (x.type ? '<span class="ty">' + esc(tl(x.type)) + '</span>' : '') + '</td></tr>';
+          });
+          if(nt.length){
+            h += '<tr class="nt"><td colspan="2">📝 كلمات لا تحتسب أخطاء</td></tr>';
+            nt.forEach(x => { h += '<tr class="nt"><td>' + esc(x.word) + (x.ayah ? ' <span class="tr-sm">(' + (!sur && x.surah ? esc(x.surah) + ' · ' : '') + 'آية ' + esc(ad(x.ayah)) + ')</span>' : '') + '</td><td>' + esc(NOTE_LABELS[x.type] || '') + '</td></tr>'; });
+          }
+          t.push('   ' + r.student + ' (' + gr + '): ' + er.map(x => x.word + (x.ayah ? ' (' + (!sur && x.surah ? x.surah + ' · ' : '') + 'آية ' + ad(x.ayah) + ')' : '') + (x.said ? ' ← ' + x.said : '')).join(' | '));
+          if(nt.length) t.push('      📝 كلمات لا تحتسب أخطاء: ' + nt.map(x => x.word + (x.ayah ? ' (آية ' + ad(x.ayah) + ')' : '') + ' — ' + (NOTE_LABELS[x.type] || '')).join(' | '));
+        });
+        h += '</tbody></table></div></div>';
+      });
+      h += '</div>';
     });
     return {h: h, t: t.join('\n')};
   }
@@ -1127,7 +1240,7 @@ $('bkBtn').addEventListener('click', () => {
     ov.innerHTML = '<div class="tr-box"><div class="tr-noprint">' + TOPBTN('trClose2') + '</div><div class="tr-tabs tr-noprint"></div><div class="tr-ctl tr-noprint"></div><div class="tr-body"></div><div class="tr-act tr-noprint"><button type="button" class="tr-b p" id="trPrint">🖨️ طباعة / حفظ PDF</button><button type="button" class="tr-b" id="trWa">💬 واتساب نص</button><button type="button" class="tr-b" id="trX">إغلاق</button></div></div>';
     document.body.appendChild(ov);
     const q = s => ov.querySelector(s);
-    const TABS_ = [['tst', '🧪 تقرير كل اختبار'], ['wsum', '🧾 ملخص الأسبوع'], ['week', '📅 التقرير الأسبوعي'], ['mon', '🗓️ تقرير شهري'], ['stu', '📈 تطور الطالب']];
+    const TABS_ = [['atq', '🧾 تقرير بعد كل اختبار — القرآن'], ['ats', '🧾 تقرير بعد كل اختبار — سورة'], ['wsum', '🧾 ملخص الأسبوع'], ['week', '📅 التقرير الأسبوعي'], ['mon', '🗓️ تقرير شهري'], ['stu', '📈 تطور الطالب']];
     const sel = (id, list, val, first) => '<select id="' + id + '">' + (first != null ? '<option value="">' + first + '</option>' : '') + list.map(o => { const v = Array.isArray(o) ? o[0] : o, l = Array.isArray(o) ? o[1] : o; return '<option value="' + esc(v) + '"' + (v === val ? ' selected' : '') + '>' + esc(l) + '</option>'; }).join('') + '</select>';
     function draw(){
       q('.tr-tabs').innerHTML = TABS_.map(x => '<button type="button" data-t="' + x[0] + '" class="' + (x[0] === TR.tab ? 'on' : '') + '">' + x[1] + '</button>').join('');
@@ -1135,9 +1248,9 @@ $('bkBtn').addEventListener('click', () => {
       if(TR.br && brs.indexOf(TR.br) < 0) TR.br = '';
       const brSel = brs.length ? '<label>الفرع' + sel('trBr', brs, TR.br, 'كل الفروع') + '</label>' : '';
       let ctl = '', out;
-      if(TR.tab === 'tst' || TR.tab === 'wsum' || TR.tab === 'week'){
+      if(TR.tab === 'atq' || TR.tab === 'ats' || TR.tab === 'wsum' || TR.tab === 'week'){
         ctl = '<label>من<input type="date" id="trF" value="' + TR.from + '"></label><label>إلى<input type="date" id="trT" value="' + TR.to + '"></label><button type="button" class="tr-b" data-q="6">آخر ٧ أيام</button><button type="button" class="tr-b" data-q="13">آخر ١٤ يوم</button><button type="button" class="tr-b" data-q="m">الشهر ده</button>' + brSel;
-        out = TR.tab === 'tst' ? trTst() : TR.tab === 'wsum' ? trWsum() : trWeek();
+        out = TR.tab === 'atq' ? trAft(false) : TR.tab === 'ats' ? trAft(true) : TR.tab === 'wsum' ? trWsum() : trWeek();
       }else if(TR.tab === 'mon'){
         out = trMon();
         ctl = '<label>الشهر' + sel('trM', trMonths().map(m => [m, mLbl(m)]), TR.mon, null) + '</label>' + brSel;
@@ -1146,6 +1259,7 @@ $('bkBtn').addEventListener('click', () => {
         ctl = brSel + '<label>الفصل' + sel('trC', L.cls, TR.cls, 'كل الفصول') + '</label><label>الطالب' + sel('trS', L.names, TR.stu, null) + '</label>';
       }
       q('.tr-ctl').innerHTML = ctl; q('.tr-body').innerHTML = out.h; TR.text = out.t;
+      q('.tr-body').querySelectorAll('.tr-ta').forEach(ta => { ta.oninput = () => { try{ localStorage.setItem(ta.dataset.nk, ta.value); }catch(e){} const pr = ta.nextElementSibling; if(pr) pr.textContent = ta.value; }; });
       q('.tr-tabs').querySelectorAll('button').forEach(b => { b.onclick = () => { TR.tab = b.dataset.t; draw(); }; });
       const on = (id, fn) => { const e = q('#' + id); if(e) e.onchange = fn; };
       on('trBr', e => { TR.br = e.target.value; TR.cls = ''; TR.stu = ''; draw(); });
@@ -1154,6 +1268,7 @@ $('bkBtn').addEventListener('click', () => {
       on('trM', e => { TR.mon = e.target.value; draw(); });
       on('trC', e => { TR.cls = e.target.value; TR.stu = ''; draw(); });
       on('trS', e => { TR.stu = e.target.value; draw(); });
+      ['trC', 'trS'].forEach(id => { const e = q('#' + id); if(e) searchable(e, id === 'trS' ? '🔎 بحث باسم الطالب' : '🔎 بحث باسم الفصل'); });
       q('.tr-ctl').querySelectorAll('button[data-q]').forEach(b => { b.onclick = () => {
         const n = new Date(), v = b.dataset.q; TR.to = isoD(n);
         if(v === 'm'){ TR.from = isoD(new Date(n.getFullYear(), n.getMonth(), 1)); } else { const d = new Date(); d.setDate(d.getDate() - Number(v)); TR.from = isoD(d); }
