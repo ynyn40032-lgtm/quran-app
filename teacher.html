@@ -108,13 +108,13 @@
 
 <header>
   <div><div style="font-size:12px;color:#E8C46B;font-weight:800;margin-bottom:2px">✦ مركز الأمين الثقافي التربوي ✦<div style="font-size:11px;font-weight:700;opacity:.9">لتحفيظ القرآن الكريم</div></div><h1>📖 نتائج فصلي</h1><small id="who"></small></div>
-  <div class="hbtns"><button id="shareBtn" type="button">📤 مشاركة</button><button id="logoutBtn" type="button">خروج</button></div>
+  <div class="hbtns"><button id="logoutBtn" type="button">خروج</button></div>
 </header>
 
 <main>
   <div id="chips" class="chips"></div>
   <div class="live">🟢 بيتحدّث تلقائي أول ما يتسجل اختبار لفصلك</div>
-  <div class="tools"><button id="vwBtn" type="button">🔍 عرض التفاصيل</button><button id="txBtn" type="button">📋 مشاركة كقائمة</button><button id="xlBtn" type="button" style="display:none">⬇ تصدير Excel</button><button id="bkBtn" type="button" style="display:none">💾 نسخة احتياطية</button></div>
+  <div class="tools"><button id="vwBtn" type="button">🔍 عرض التفاصيل</button></div>
   <div id="sum" class="sum"></div>
   <div id="list"></div>
 </main>
@@ -192,7 +192,6 @@ auth.onAuthStateChanged(u => {
   $('login').style.display = 'none';
   $('who').textContent = u.email || '';
   isAdmin = ADMIN_EMAILS.indexOf(String(u.email || '').toLowerCase()) >= 0;
-  $('xlBtn').style.display = isAdmin ? '' : 'none'; $('bkBtn').style.display = isAdmin ? '' : 'none';
   // كل معلمة بتشوف بس النتايج اللي ownerEmail بتاعها = إيميلها
   unsub = db.collection('classResults')
     .where('ownerEmail', '==', String(u.email || '').toLowerCase())
@@ -422,12 +421,6 @@ function render(){
 function syncVw(){ $('vwBtn').textContent = viewMode === 'list' ? '🔍 عرض التفاصيل' : '📋 عرض مختصر'; }
 syncVw();
 $('vwBtn').addEventListener('click', () => { viewMode = viewMode === 'list' ? 'full' : 'list'; try{ localStorage.setItem('teacher:view', viewMode); }catch(e){} syncVw(); render(); });
-$('txBtn').addEventListener('click', async () => {
-  if(!results.length){ alert('مفيش نتايج تتشارك.'); return; }
-  const t = listText();
-  if(navigator.share){ try{ await navigator.share({text: t}); return; }catch(e){ if(e && e.name === 'AbortError') return; } }
-  try{ await navigator.clipboard.writeText(t); alert('اتنسخت القائمة ✓ الصقيها في واتساب'); }catch(e){ prompt('انسخي القائمة:', t); }
-});
 $('list').addEventListener('click', e => {
   if(e.target.closest('.pm') || e.target.closest('.nd')) return;
   const h = e.target.closest('.nl'); if(!h) return;
@@ -475,25 +468,6 @@ async function buildShots(){
     return out;
   } finally { box.remove(); }
 }
-$('shareBtn').addEventListener('click', async () => {
-  const btn = $('shareBtn'); const old = btn.textContent;
-  if(typeof html2canvas === 'undefined'){ alert('محتاج إنترنت عشان تجهيز الصورة. جرّبي تاني.'); return; }
-  btn.disabled = true; btn.textContent = '⏳ بجهّز الصورة...';
-  try{
-    const blobs = await buildShots();
-    const d = new Date().toISOString().slice(0, 10);
-    const files = blobs.map((b, i) => new File([b], 'نتائج-فصلي-' + d + (blobs.length > 1 ? '-' + (i + 1) : '') + '.png', {type:'image/png'}));
-    if(navigator.canShare && navigator.canShare({files})){
-      try{ await navigator.share({files, title:'نتائج فصلي'}); }
-      catch(e){ if(e && e.name === 'AbortError') return; throw e; }
-    } else {
-      files.forEach(f => { const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); });
-      alert('المتصفح مش بيدعم المشاركة المباشرة، فالصورة اتحفظت في الجهاز. افتحي واتساب وابعتيها من المعرض.');
-    }
-  }catch(e){ alert('حصلت مشكلة في تجهيز الصورة: ' + (e && e.message || e)); }
-  finally{ btn.disabled = false; btn.textContent = old; }
-});
-
 // ===== 💬 رسالة لولي الأمر + ⬇ تصدير Excel + 💾 نسخة احتياطية =====
 const isFem = r => r.gender === 'f' || r.gender === 'أنثى' || r.gender === 'بنت';
 function parentMsg(r){
@@ -530,22 +504,6 @@ $('list').addEventListener('click', e => {
 });
 function dlFile(name, text, mime){ const b = new Blob([text], {type: mime}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(a.href); }, 800); }
 const csvCell = c => { c = String(c == null ? '' : c); return /[",\n\r]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; };
-$('xlBtn').addEventListener('click', () => {
-  const rows = results.filter(r => filter === 'all' || r.className === filter).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-  if(!rows.length){ alert('مفيش نتايج تتصدّر.'); return; }
-  const out = [['التاريخ', 'الفصل', 'اسم الطالب', 'نوع الاختبار', 'السور / الجزء', 'الدرجة', 'النسبة ٪', 'النتيجة', 'عدد الأخطاء', 'المختبِر/ة', 'ملاحظات']];
-  rows.forEach(r => {
-    const qs = (Array.isArray(r.questions) ? r.questions : []).filter(q => q && q.surah).map(q => q.surah + (q.ayahRange ? ' (' + q.ayahRange + ')' : '')).join(' / ');
-    const part = [r.testType || '', r.hizb !== '' && r.hizb != null ? 'حزب ' + r.hizb : '', r.rub ? 'ربع ' + r.rub : ''].filter(Boolean).join(' - ');
-    const p = pctOf(r);
-    out.push([r.date || '', r.className || '', r.student || '', r.app === 'surah' ? 'اختبار سورة' : 'اختبار جزء', qs || part, r.grade, p === null ? '' : Math.round(p * 10) / 10, r.status || '', r.mistakes || 0, r.supervisorName || '', r.notes || '']);
-  });
-  dlFile('نتائج-فصلي-' + new Date().toISOString().slice(0, 10) + '.csv', '\ufeff' + out.map(r => r.map(csvCell).join(',')).join('\r\n'), 'text/csv;charset=utf-8');
-});
-$('bkBtn').addEventListener('click', () => {
-  if(!results.length){ alert('مفيش نتايج تتحفظ.'); return; }
-  dlFile('نسخة-نتائج-فصلي-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify({v: 1, saved: new Date().toISOString(), results}, null, 1), 'application/json');
-});
 </script>
 </body>
 </html>
