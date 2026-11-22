@@ -56,6 +56,13 @@
   .dt .qq:first-of-type{ border-top:0; }
   .dt .er{ margin:2px 0 0; padding-inline-start:4px; }
   .dt .wd{ font-family:'UthmanicHafs','Amiri Quran','Amiri',serif; font-size:19px; color:#0F2440; }
+  .dt .ok2{ font-size:12px; font-weight:800; color:var(--ok,#1E7A46); }
+  .dt .bd2{ font-size:12px; font-weight:800; color:var(--bad); }
+  .nerr{ margin:4px 0 2px; padding:5px 8px; background:#FFF8F6; border:1px dashed #E3B5AE; border-radius:8px; font-size:13px; line-height:2; }
+  .nerr .wd{ font-family:'UthmanicHafs','Amiri Quran','Amiri',serif; font-size:19px; color:#0F2440; }
+  .nerr .sd{ font-family:'UthmanicHafs','Amiri Quran','Amiri',serif; font-size:19px; color:var(--bad); }
+  .nerr .ok2{ font-size:12px; font-weight:800; color:#1E7A46; }
+  .nerr .bd2{ font-size:12px; font-weight:800; color:var(--bad); }
   .dt .sd{ font-family:'UthmanicHafs','Amiri Quran','Amiri',serif; font-size:19px; color:var(--bad); }
   .dt .fu{ background:#F3F7FD; border:1.5px dashed #3D6AA5; border-radius:10px; padding:6px 10px; margin:6px 0; font-size:13px; line-height:1.9; color:#1F4A7A; }
   .dt .fut{ display:inline-block; background:#EAF1FB; border:1px solid #3D6AA5; border-radius:8px; padding:0 7px; font-size:12px; font-weight:700; color:#1F4A7A; }
@@ -112,6 +119,7 @@
 </header>
 
 <main>
+  <div id="mchips" class="chips"></div>
   <div id="chips" class="chips"></div>
   <div class="live">🟢 بيتحدّث تلقائي أول ما يتسجل اختبار لفصلك</div>
   <div class="tools"><button id="vwBtn" type="button">🔍 عرض التفاصيل</button></div>
@@ -132,6 +140,47 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const SEEN_KEY = 'teacher:seen';
 let seen = {}, results = [], filter = 'all', first = true, unsub = null, teachersMap = {}, viewMode = 'list', isAdmin = false;
+
+/* ===== 🗓️ تبويبات الشهور: بترتيب السنة، والشهر/السنة الجديدة بتنزل لوحدها ===== */
+const MN_NAMES = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+let MN_SEL = (() => { const n = new Date(); return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0'); })(); /* الافتراضي: الشهر الحالي بس (بيتغير لوحده كل شهر) */
+const _p2 = n => String(n).padStart(2, '0');
+let MN_AUTO = true;
+function mnOf(r){
+  let d = r && r.date;
+  if(d && typeof d.toDate === 'function') d = d.toDate();
+  if(d instanceof Date) return isNaN(d) ? '' : d.getFullYear() + '-' + _p2(d.getMonth() + 1);
+  d = String(d == null ? '' : d).replace(/[٠-٩]/g, c => c.charCodeAt(0) - 0x0660).replace(/[۰-۹]/g, c => c.charCodeAt(0) - 0x06F0).trim();
+  let m = d.match(/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/); if(m) return m[1] + '-' + _p2(m[2]);
+  m = d.match(/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/); if(m) return m[3] + '-' + _p2(m[2]);
+  return '';
+}
+const mnOk = r => MN_SEL === 'all' || mnOf(r) === MN_SEL;
+function mnList(rows){
+  const set = {}; (rows || []).forEach(r => { const m = mnOf(r); if(/^\d{4}-\d{2}$/.test(m)) set[m] = 1; });
+  if(!Object.keys(set).length) return [];
+  const n = new Date(); set[n.getFullYear() + '-' + _p2(n.getMonth() + 1)] = 1;
+  const ks = Object.keys(set).sort();
+  const a = ks[0].split('-').map(Number), b = ks[ks.length - 1].split('-').map(Number);
+  if((b[0] - a[0]) * 12 + (b[1] - a[1]) > 36) return ks;
+  const out = []; let y = a[0], m = a[1];
+  while(y < b[0] || (y === b[0] && m <= b[1])){ out.push(y + '-' + _p2(m)); m++; if(m > 12){ m = 1; y++; } }
+  return out;
+}
+function mnLabel(ym, withYear){ const p = String(ym).split('-'); return (MN_NAMES[+p[1] - 1] || ym) + (withYear ? ' ' + p[0] : ''); }
+function mnFull(ym){ return mnLabel(ym, true); }
+function renderMonthChips(rows){
+  const box = document.getElementById('mchips'); if(!box) return;
+  if(MN_AUTO){ const n = new Date(); MN_SEL = n.getFullYear() + '-' + _p2(n.getMonth() + 1); } /* لحد ما تختاري تبويب بنفسك: بيمشي مع الشهر الحالي لوحده */
+  const ms = mnList(rows);
+  if(MN_SEL !== 'all' && ms.indexOf(MN_SEL) < 0) MN_SEL = 'all';
+  if(!ms.length){ box.innerHTML = ''; return; }
+  const multi = ms[0].slice(0, 4) !== ms[ms.length - 1].slice(0, 4);
+  box.innerHTML = '<button type="button" class="chip ' + (MN_SEL === 'all' ? 'on' : '') + '" data-m="all" style="border-color:var(--gold)">🗓️ كل الشهور</button>' +
+    ms.map(m => '<button type="button" class="chip ' + (m === MN_SEL ? 'on' : '') + '" data-m="' + m + '" style="border-color:var(--gold)">' + esc(mnLabel(m, multi)) + '</button>').join('');
+  const on = box.querySelector('.chip.on');
+  if(on && MN_SEL !== 'all'){ try{ box.scrollLeft += on.getBoundingClientRect().left - box.getBoundingClientRect().left - (box.clientWidth - on.offsetWidth) / 2; }catch(e){} }
+}
 const ADMIN_EMAILS = ['asmaa@school.com'];
 try{ viewMode = localStorage.getItem('teacher:view') === 'full' ? 'full' : 'list'; }catch(e){}
 try{ seen = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}') || {}; }catch(e){}
@@ -262,7 +311,7 @@ function detailHtml(r, flat){
     if(items.length){
       h += '<div class="er">' + items.map((it, k) => {
         const m = it.match(/^(.*?)\s*\((آية\s*[^)]*)\)\s*$/), t = (q.wordTypes || [])[k] || '', s = fixSaid((q.wordSaid || [])[k] || '');
-        return '• <span class="wd">' + esc(m ? m[1] : it) + '</span>' + (m ? ' <span style="color:var(--muted);font-size:12px">(' + esc(m[2]) + ')</span>' : '') + (t ? ' <span class="ty">' + esc(tl(t)) + '</span>' : '') + (s ? ' ← قالها «<span class="sd">' + esc(s) + '</span>»' : '');
+        return '• ' + (t ? '<span class="ty">' + esc(tl(t)) + '</span> ' : '') + (m ? '<span style="color:var(--muted);font-size:12px">(' + esc(m[2]) + ')</span> ' : '') + '<span class="ok2">✅ الصح:</span> <span class="wd">' + esc(m ? m[1] : it) + '</span>' + (s ? ' &nbsp;<span class="bd2">❌ نطقها:</span> <span class="sd">' + esc(s) + '</span>' : '');
       }).join('<br>') + '</div>';
     }
     h += ayahBlocks(q);
@@ -308,35 +357,42 @@ function whereOf(r){
 }
 function statusLabel(r){ const pass = r.status === 'ناجح', f = r.gender === 'f' || r.gender === 'أنثى' || r.gender === 'بنت'; return f ? (pass ? 'ناجحة' : 'راسبة') : (pass ? 'ناجح' : 'راسب'); }
 function groupRows(rows){
-  const byC = {}; rows.forEach(r => { (byC[r.className] = byC[r.className] || []).push(r); });
+  const byC = {}, kinds = {}; rows.forEach(r => { const kd = r.app === 'surah' ? 's' : 'j'; (byC[r.className + '\u0001' + kd] = byC[r.className + '\u0001' + kd] || []).push(r); (kinds[r.className] = kinds[r.className] || {})[kd] = 1; });
   const hasT = Object.keys(teachersMap).length > 0, byT = {}, order = [];
-  Object.keys(byC).sort((a, b) => a.localeCompare(b, 'ar')).forEach(cn => {
+  Object.keys(byC).sort((a, b) => { const x = a.split('\u0001'), y = b.split('\u0001'); return x[0].localeCompare(y[0], 'ar') || x[1].localeCompare(y[1]); }).forEach(key => {
+    const cn = key.split('\u0001')[0], kd = key.split('\u0001')[1];
     const t = teachersMap[clsKey(cn)] || (hasT ? 'معلمة غير محددة' : '');
     if(!byT[t]){ byT[t] = []; order.push(t); }
-    const m = new Map(); byC[cn].forEach(r => { const k = nrm(r.student); if(!m.has(k)) m.set(k, []); m.get(k).push(r); });
+    const m = new Map(); byC[key].forEach(r => { const k = nrm(r.student); if(!m.has(k)) m.set(k, []); m.get(k).push(r); });
     const stu = Array.from(m.values()); stu.forEach(g => g.sort((a, b) => (b.ts || 0) - (a.ts || 0)));
     stu.sort((a, b) => String(a[0].student).localeCompare(String(b[0].student), 'ar'));
-    byT[t].push({name: cn, rows: byC[cn], students: stu});
+    byT[t].push({name: cn + (Object.keys(kinds[cn]).length > 1 ? (kd === 's' ? ' — 📖 اختبار على سورة' : ' — 📚 اختبار على جزء') : ''), rows: byC[key], students: stu});
   });
   order.sort((a, b) => a.localeCompare(b, 'ar'));
   return order.map(t => ({teacher: t, classes: byT[t]}));
+}
+function nerrHtml(r){
+  let es = []; try{ es = errsOf(r).filter(e => e.word); }catch(e){}
+  if(!es.length) return '';
+  return '<div class="nerr">' + es.map(e => '• ' + (e.type ? '<span class="ty">' + esc(tl(e.type)) + '</span> ' : '') + '<span class="ok2">✅ الصح:</span> <span class="wd">' + esc(e.word) + '</span>' + (e.ayah ? ' <span style="color:var(--muted);font-size:11px">(' + esc(e.ayah) + ')</span>' : '') + (e.said ? ' &nbsp;<span class="bd2">❌ نطقها:</span> <span class="sd">' + esc(e.said) + '</span>' : '')).join('<br>') + '</div>';
 }
 function compactHtml(rows){
   return groupRows(rows).map(g => (g.teacher ? '<div class="tch">👩‍🏫 ' + esc(g.teacher) + '</div>' : '') + g.classes.map(c => {
     const o = c.rows.filter(r => r.status === 'ناجح').length;
     return '<div class="cls"><h3><span style="font-size:17px">' + esc(c.name) + '</span><span>✅ ' + AD(o) + ' ناجح · ❌ ' + AD(c.rows.length - o) + ' راسب</span></h3>' +
       c.students.map(list => list.map(r => {
-        const pass = r.status === 'ناجح', gr = (r.grade !== '' && r.grade != null) ? AD(r.grade) + (r.app === 'surah' ? '/١٠' : '') : '';
+        const pass = r.status === 'ناجح', gr = (r.grade !== '' && r.grade != null) ? (r.app === 'surah' ? '١٠/' : '١٠٠/') + AD(r.grade) : '';
         return '<div class="nlw"><div class="nl"><span class="nm">' + esc(r.student) + (!seen[r.id] ? '<span class="new">جديد</span>' : '') + '</span>' +
           '<span class="nr"><span class="badge ' + (pass ? 'ok' : 'bad') + '">' + statusLabel(r) + '</span><small>' + esc(gr) + '</small></span>' +
-          '<span class="nlm">' + esc(whereOf(r)) + '</span></div>' +
+          '<span class="nlm">' + esc(whereOf(r)) + '</span></div>' + nerrHtml(r) +
           '<div class="nd" style="display:none">' + detailHtml(r, true) + (isAdmin ? '<button type="button" class="pm" data-id="' + esc(r.id) + '">💬 رسالة لولي الأمر</button>' : '') + '</div></div>';
       }).join('')).join('') + '</div>';
   }).join('')).join('');
 }
 function listText(){
-  const rows = results.filter(r => filter === 'all' || r.className === filter);
+  const rows = results.filter(mnOk).filter(r => filter === 'all' || r.className === filter);
   const L = ['📊 نتائج الاختبارات — مركز الأمين الثقافي التربوي', ''];
+  if(MN_SEL !== 'all') L.push('🗓️ شهر ' + mnFull(MN_SEL), '');
   groupRows(rows).forEach(g => {
     if(g.teacher) L.push('👩‍🏫 ' + g.teacher, '');
     g.classes.forEach(c => {
@@ -350,14 +406,15 @@ function listText(){
 }
 
 function render(){
-  const classes = [...new Set(results.map(r => r.className).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
+  renderMonthChips(results);
+  const classes = [...new Set(results.filter(mnOk).map(r => r.className).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
   if(filter !== 'all' && !classes.includes(filter)) filter = 'all';
 
   $('chips').innerHTML = classes.length > 1
     ? ['all'].concat(classes).map(c => `<button type="button" class="chip ${c === filter ? 'on' : ''}" data-c="${esc(c)}">${c === 'all' ? 'كل فصولي' : esc(c)}</button>`).join('')
     : '';
 
-  const shown = results.filter(r => filter === 'all' || r.className === filter);
+  const shown = results.filter(mnOk).filter(r => filter === 'all' || r.className === filter);
   const ok = shown.filter(r => r.status === 'ناجح').length;
   $('sum').innerHTML = shown.length
     ? `<div><b>${shown.length}</b>اختبار</div><div class="g"><b>${ok}</b>ناجح</div><div class="r"><b>${shown.length - ok}</b>راسب</div>`
@@ -365,7 +422,7 @@ function render(){
   if(shown.length && window.__dups > 0) $('sum').insertAdjacentHTML('beforeend', '<div style="grid-column:1/-1;background:none;border:0;padding:0;font-size:12px">تم إخفاء ' + window.__dups + ' نتيجة مكررة</div>');
 
   if(!shown.length){
-    $('list').innerHTML = '<div class="empty">📭 مفيش اختبارات لفصولك لسه.<br>أول ما يتسجل اختبار لفصلك هيظهر هنا تلقائيًا.</div>';
+    $('list').innerHTML = MN_SEL !== 'all' ? '<div class="empty">📭 مفيش اختبارات في شهر ' + esc(mnFull(MN_SEL)) + '.<br>تقدري تختاري شهر تاني أو «كل الشهور» من فوق.</div>' : '<div class="empty">📭 مفيش اختبارات لفصولك لسه.<br>أول ما يتسجل اختبار لفصلك هيظهر هنا تلقائيًا.</div>';
     return;
   }
   const rowHtml = (r, showName) => {
@@ -392,7 +449,7 @@ function render(){
     const gs = Array.from(m.values()); gs.forEach(g => g.sort((a, b) => (b.ts || 0) - (a.ts || 0)));
     return gs.sort((a, b) => String(a[0].student).localeCompare(String(b[0].student), 'ar')); };
   const by = {};
-  shown.forEach(r => { const key = r.className + '||x'; (by[key] = by[key] || []).push(r); });
+  shown.forEach(r => { const key = r.className + '||' + (r.app === 'surah' ? 's' : 'j'); (by[key] = by[key] || []).push(r); });
   const kindInfo = (rows, kd) => {
     const set = [], add = x => { if(x && set.indexOf(x) === -1) set.push(x); };
     rows.forEach(r => {
@@ -408,7 +465,8 @@ function render(){
     const isG = r => { const p = pctOf(r); return p !== null && p >= 95; }; const latest = {}; rows.forEach(r => { const k = nrm(r.student); if(!latest[k] || (r.ts || 0) > (latest[k].ts || 0)) latest[k] = r; });
     const wk = rows.filter(r => !isG(latest[nrm(r.student)])), gd = rows.filter(r => isG(latest[nrm(r.student)]));
     const sRows = rows.filter(r => r.app === 'surah'), jRows = rows.filter(r => r.app !== 'surah');
-    return `<div class="cls"><h3><span style="font-size:17px">${esc(cn)} </span><span>✅ ${o} ناجح · ❌ ${rows.length - o} راسب</span></h3>` +
+    const both = Object.keys(by).some(k2 => k2 !== key && k2.split('||')[0] === cn);
+    return `<div class="cls"><h3><span style="font-size:17px">${esc(cn)}${both ? ' — ' + (kd === 's' ? '📖 اختبار على سورة' : '📚 اختبار على جزء') : ''} </span><span>✅ ${o} ناجح · ❌ ${rows.length - o} راسب</span></h3>` +
       kindInfo(sRows, 's') + kindInfo(jRows, 'j') + sec('⚠️ الضعاف (أقل من ٩٥٪)', wk) + sec('🌟 الشطار (٩٥٪ فأكثر)', gd) + '</div>';
   }).join('');
 
@@ -426,6 +484,10 @@ $('list').addEventListener('click', e => {
   const h = e.target.closest('.nl'); if(!h) return;
   const d = h.parentNode.querySelector('.nd'); if(d) d.style.display = d.style.display === 'none' ? 'block' : 'none';
 });
+$('mchips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if(!b || !b.dataset.m) return;
+  MN_SEL = b.dataset.m; MN_AUTO = false; render();
+});
 $('chips').addEventListener('click', e => {
   const b = e.target.closest('.chip'); if(!b) return;
   filter = b.dataset.c; render();
@@ -439,7 +501,7 @@ async function buildShots(){
   box.appendChild(hd);
   const main = document.createElement('main');
   main.style.cssText = 'padding:14px;max-width:none';
-  const f = filter !== 'all' ? '<div style="text-align:center;font-weight:800;margin-bottom:8px">' + esc(filter) + '</div>' : '';
+  const f = (MN_SEL !== 'all' ? '<div style="text-align:center;font-weight:800;margin-bottom:8px">🗓️ شهر ' + esc(mnFull(MN_SEL)) + '</div>' : '') + (filter !== 'all' ? '<div style="text-align:center;font-weight:800;margin-bottom:8px">' + esc(filter) + '</div>' : '');
   main.innerHTML = f + '<div class="sum">' + $('sum').innerHTML + '</div><div>' + $('list').innerHTML + '</div>';
   box.appendChild(main);
   document.body.appendChild(box);
