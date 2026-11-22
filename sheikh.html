@@ -985,7 +985,7 @@ $('bkBtn').addEventListener('click', () => {
   document.head.appendChild(tcCss);
   function tcData(ymArg){
     const now = ymArg ? new Date(+ymArg.slice(0, 4), +ymArg.slice(5, 7) - 1, 1) : new Date(), ym = now.getFullYear() + '-' + p2(now.getMonth() + 1);
-    const list = latestPerStudent(results.filter(valid).filter(r => dOf(r).slice(0, 7) === ym));
+    const list = latestPerStudent(results.filter(valid).filter(r => dOf(r).slice(0, 7) === ym).filter(r => !(ym === '2026-11' && nrm(r.className) === nrm('فصل خالد')))); /* فصل خالد اختبر في أكتوبر: مخفي من نوفمبر بس */
     const T = {};
     /* محفظة الفصل (من الجدول اللي بيبعته برنامج الاختبارات) — بتجمّع فصولها سواء اختبرت على جزء أو سورة، مش حسب المختبِرة */
     const TM = []; rosters.forEach(x => (Array.isArray(x.teachers) ? x.teachers : []).forEach(i => { if(i && i.c && i.t) TM.push(i); }));
