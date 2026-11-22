@@ -98,6 +98,7 @@
 
 <main>
   <div id="pf" class="chips"></div>
+  <div id="mchips" class="chips"></div>
   <div id="chips" class="chips"></div>
   <div class="tools"><button id="crBtn" type="button" style="background:#0F2440;color:#F4EFDC;border-color:#0F2440">📊 تقرير إجمالي الفصول</button><button id="tcBtn" type="button">👩‍🏫 المحفظات</button><button id="trBtn" type="button">📚 التقارير</button><button id="xlBtn" type="button">⬇ تصدير Excel</button><button id="bkBtn" type="button">💾 نسخة احتياطية</button></div>
   <div id="sum" class="sum"></div>
@@ -116,8 +117,53 @@ const FIREBASE_CONFIG = {
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const SHEIKH_EMAILS = ['sheikh@alamin.com']; // حسابات الشيخ: بتشوف كل الفصول
+/* فصول تجريبية (اختبارات جزء بس): مخفية من تقارير الشيخ. اختبارات السورة بتاعتهم لو فيه بتفضل زي ما هي */
+const HIDDEN_TRIAL = [{c: 'ماجد', s: ['سلمى', 'صفاء']}, {c: 'عمر', s: ['عبير', 'محمد']}];
+const isTrialRes = x => { if(!x || x.app === 'surah') return false; const n = t => String(t == null ? '' : t).replace(/[ً-ْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim().toLowerCase(), c = n(x.className).replace(/^فصل\s+/, ''), st = n(x.student); return HIDDEN_TRIAL.some(h => n(h.c) === c && h.s.some(y => n(y) === st)); };
+const HIDDEN_TEACHERS = ['منى', 'مني', 'ندا']; // محفظات تجريبية: مخفية من تقارير الشيخ (اختباراتهم مش بتظهر)
 const SEEN_KEY = 'teacher:seen';
 let seen = {}, results = [], rosters = [], filter = 'all', first = true, unsub = null;
+
+/* ===== 🗓️ تبويبات الشهور: بترتيب السنة، والشهر/السنة الجديدة بتنزل لوحدها ===== */
+const MN_NAMES = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+let MN_SEL = (() => { const n = new Date(); return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0'); })(); /* الافتراضي: الشهر الحالي بس (بيتغير لوحده كل شهر) */
+const _p2 = n => String(n).padStart(2, '0');
+let MN_AUTO = true;
+function mnOf(r){
+  let d = r && r.date;
+  if(d && typeof d.toDate === 'function') d = d.toDate();
+  if(d instanceof Date) return isNaN(d) ? '' : d.getFullYear() + '-' + _p2(d.getMonth() + 1);
+  d = String(d == null ? '' : d).replace(/[٠-٩]/g, c => c.charCodeAt(0) - 0x0660).replace(/[۰-۹]/g, c => c.charCodeAt(0) - 0x06F0).trim();
+  let m = d.match(/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/); if(m) return m[1] + '-' + _p2(m[2]);
+  m = d.match(/(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/); if(m) return m[3] + '-' + _p2(m[2]);
+  return '';
+}
+const mnOk = r => MN_SEL === 'all' || mnOf(r) === MN_SEL;
+function mnList(rows){
+  const set = {}; (rows || []).forEach(r => { const m = mnOf(r); if(/^\d{4}-\d{2}$/.test(m)) set[m] = 1; });
+  if(!Object.keys(set).length) return [];
+  const n = new Date(); set[n.getFullYear() + '-' + _p2(n.getMonth() + 1)] = 1;
+  const ks = Object.keys(set).sort();
+  const a = ks[0].split('-').map(Number), b = ks[ks.length - 1].split('-').map(Number);
+  if((b[0] - a[0]) * 12 + (b[1] - a[1]) > 36) return ks;
+  const out = []; let y = a[0], m = a[1];
+  while(y < b[0] || (y === b[0] && m <= b[1])){ out.push(y + '-' + _p2(m)); m++; if(m > 12){ m = 1; y++; } }
+  return out;
+}
+function mnLabel(ym, withYear){ const p = String(ym).split('-'); return (MN_NAMES[+p[1] - 1] || ym) + (withYear ? ' ' + p[0] : ''); }
+function mnFull(ym){ return mnLabel(ym, true); }
+function renderMonthChips(rows){
+  const box = document.getElementById('mchips'); if(!box) return;
+  if(MN_AUTO){ const n = new Date(); MN_SEL = n.getFullYear() + '-' + _p2(n.getMonth() + 1); } /* لحد ما تختاري تبويب بنفسك: بيمشي مع الشهر الحالي لوحده */
+  const ms = mnList(rows);
+  if(MN_SEL !== 'all' && ms.indexOf(MN_SEL) < 0) MN_SEL = 'all';
+  if(!ms.length){ box.innerHTML = ''; return; }
+  const multi = ms[0].slice(0, 4) !== ms[ms.length - 1].slice(0, 4);
+  box.innerHTML = '<button type="button" class="chip ' + (MN_SEL === 'all' ? 'on' : '') + '" data-m="all" style="border-color:var(--gold)">🗓️ كل الشهور</button>' +
+    ms.map(m => '<button type="button" class="chip ' + (m === MN_SEL ? 'on' : '') + '" data-m="' + m + '" style="border-color:var(--gold)">' + esc(mnLabel(m, multi)) + '</button>').join('');
+  const on = box.querySelector('.chip.on');
+  if(on && MN_SEL !== 'all'){ try{ box.scrollLeft += on.getBoundingClientRect().left - box.getBoundingClientRect().left - (box.clientWidth - on.offsetWidth) / 2; }catch(e){} }
+}
 try{ seen = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}') || {}; }catch(e){}
 
 function authErr(e){
@@ -209,7 +255,7 @@ auth.onAuthStateChanged(u => {
   const _q = SHEIKH_EMAILS.indexOf(_em) !== -1 ? db.collection('classResults') : db.collection('classResults').where('ownerEmail', '==', _em);
   unsub = _q
     .onSnapshot(snap => {
-      const list = []; rosters = []; snap.forEach(d => { const x = d.data(); x.id = d.id; if(x.kind === 'roster'){ rosters.push(x); return; } list.push(x); });
+      const list = []; rosters = []; snap.forEach(d => { const x = d.data(); x.id = d.id; if(x.kind === 'roster'){ rosters.push(x); return; } if(HIDDEN_TEACHERS.indexOf(String(x.supervisorName || '').replace(/^\s*أ\s*[.\/]\s*/, '').replace(/\s+/g, ' ').trim()) >= 0) return; if(isTrialRes(x)) return; list.push(x); });
       results = dedupe(canonClasses(list));
       render();
       if(window.__tcRefresh) window.__tcRefresh();
@@ -323,12 +369,14 @@ function passPT(r){
   const d = String(r.date || '').slice(0, 10);
   if(PER === 'today' && d !== todayIso()) return false;
   if(PER === 'week' && (!d || d < weekIso())) return false;
+  if(!mnOk(r)) return false;
   if(KIND === 'j' && r.app === 'surah') return false;
   if(KIND === 's' && r.app !== 'surah') return false;
   return true;
 }
 const visible = () => results.filter(passPT).filter(r => filter === 'all' || r.className === filter);
 function render(){
+  renderMonthChips(results);
   $('pf').innerHTML = [['today','📅 النهاردة'],['week','آخر ٧ أيام'],['all','كل الفترات']].map(x => `<button type="button" class="chip ${PER === x[0] ? 'on' : ''}" data-p="${x[0]}">${x[1]}</button>`).join('') +
     [['all','الكل'],['j','📖 جزء'],['s','🎙️ سورة']].map(x => `<button type="button" class="chip ${KIND === x[0] ? 'on' : ''}" data-t="${x[0]}" style="border-style:dashed">${x[1]}</button>`).join('');
   const classes = [...new Set(results.filter(passPT).map(r => r.className).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
@@ -346,7 +394,7 @@ function render(){
   if(shown.length && window.__dups > 0) $('sum').insertAdjacentHTML('beforeend', '<div style="grid-column:1/-1;background:none;border:0;padding:0;font-size:12px">تم إخفاء ' + window.__dups + ' نتيجة مكررة</div>');
 
   if(!shown.length){
-    $('list').innerHTML = '<div class="empty">📭 مفيش اختبارات ' + (PER === 'today' ? 'النهاردة لسه' : (PER === 'week' ? 'في آخر ٧ أيام' : 'لسه')) + '.<br>أول ما يتسجل اختبار هيظهر هنا تلقائيًا.' + (PER !== 'all' ? '<br>تقدر تضغط «كل الفترات» فوق.' : '') + '</div>';
+    $('list').innerHTML = MN_SEL !== 'all' ? '<div class="empty">📭 مفيش اختبارات في شهر ' + esc(mnFull(MN_SEL)) + (PER !== 'all' ? ' في الفترة المختارة' : '') + '.<br>اختار شهر تاني أو «كل الشهور» من فوق.' + (PER !== 'all' ? '<br>أو اضغط «كل الفترات».' : '') + '</div>' : '<div class="empty">📭 مفيش اختبارات ' + (PER === 'today' ? 'النهاردة لسه' : (PER === 'week' ? 'في آخر ٧ أيام' : 'لسه')) + '.<br>أول ما يتسجل اختبار هيظهر هنا تلقائيًا.' + (PER !== 'all' ? '<br>تقدر تضغط «كل الفترات» فوق.' : '') + '</div>';
     return;
   }
   const rowHtml = r => {
@@ -398,6 +446,10 @@ $('pf').addEventListener('click', e => {
   const b = e.target.closest('.chip'); if(!b) return;
   if(b.dataset.p) PER = b.dataset.p; if(b.dataset.t) KIND = b.dataset.t; render();
 });
+$('mchips').addEventListener('click', e => {
+  const b = e.target.closest('.chip'); if(!b || !b.dataset.m) return;
+  MN_SEL = b.dataset.m; MN_AUTO = false; render();
+});
 $('chips').addEventListener('click', e => {
   const b = e.target.closest('.chip'); if(!b) return;
   filter = b.dataset.c; render();
@@ -411,7 +463,7 @@ async function buildShots(){
   box.appendChild(hd);
   const main = document.createElement('main');
   main.style.cssText = 'padding:14px;max-width:none';
-  const f = filter !== 'all' ? '<div style="text-align:center;font-weight:800;margin-bottom:8px">' + esc(filter) + '</div>' : '';
+  const f = (MN_SEL !== 'all' ? '<div style="text-align:center;font-weight:800;margin-bottom:8px">🗓️ شهر ' + esc(mnFull(MN_SEL)) + '</div>' : '') + (filter !== 'all' ? '<div style="text-align:center;font-weight:800;margin-bottom:8px">' + esc(filter) + '</div>' : '');
   main.innerHTML = f + '<div class="sum">' + $('sum').innerHTML + '</div><div>' + $('list').innerHTML + '</div>';
   box.appendChild(main);
   document.body.appendChild(box);
@@ -627,7 +679,7 @@ $('bkBtn').addEventListener('click', () => {
       const rows = g.rows.map((r, i) => {
         const n = Number(r.grade), p = passOf(r); if(p) pass++; else fail++;
         const label = p ? (fem(r) ? 'ناجحة' : 'ناجح') : (fem(r) ? 'راسبة' : 'راسب');
-        const gr = isNaN(n) ? esc(r.grade) : ad(n) + '/' + ad(isS(r) ? 10 : 100);
+        const gr = isNaN(n) ? esc(r.grade) : ad(isS(r) ? 10 : 100) + '/' + ad(n);
         const ms = (r.mistakes === '' || r.mistakes == null) ? '-' : ad(r.mistakes);
         return '<tr><td style="width:44px">' + ad(i + 1) + '</td><td class="nm">' + esc(r.student) + (function(){ const dd = ab0 && ab0.daysOf ? ab0.daysOf(r.student) : 0; return dd ? '<div style="font-size:12px;font-weight:700;color:#8A1F1F;white-space:normal">غاب: ' + dayW(dd) + '</div>' : ''; })() + '</td><td>' + ms + '</td><td>' + gr + '</td><td class="' + (p ? 'cr-ok' : 'cr-no') + '">' + label + '</td></tr>';
       }).join('');
@@ -676,7 +728,7 @@ $('bkBtn').addEventListener('click', () => {
       let ok = 0; g.rows.forEach(r => { if(passOf(r)) ok++; });
       const ab = (AB[g.name] && !abShown[g.name]) ? (abShown[g.name] = AB[g.name]) : null;
       t += '\n*الفصل: ' + g.name + (indOfClass(g.name) ? ' — فردي' : '') + (kinds[g.name].size > 1 ? (kindOf(g.rows[0]) === 's' ? ' — اختبار على سورة' : ' — اختبار على جزء') : '') + '* (ناجح ' + ad(ok) + ' — راسب ' + ad(g.rows.length - ok) + (ab ? ' — غايب ' + ad(ab.absent.length) : '') + ')\n';
-      g.rows.forEach((r, i) => { const n = Number(r.grade); t += ad(i + 1) + '. ' + r.student + ' — ' + (isNaN(n) ? r.grade : ad(n) + '/' + ad(isS(r) ? 10 : 100)) + ' — ' + (passOf(r) ? (fem(r) ? 'ناجحة' : 'ناجح') : (fem(r) ? 'راسبة' : 'راسب')) + '\n'; });
+      g.rows.forEach((r, i) => { const n = Number(r.grade); t += ad(i + 1) + '. ' + r.student + ' — ' + (isNaN(n) ? r.grade : ad(isS(r) ? 10 : 100) + '/' + ad(n)) + ' — ' + (passOf(r) ? (fem(r) ? 'ناجحة' : 'ناجح') : (fem(r) ? 'راسبة' : 'راسب')) + '\n'; });
       if(ab && ab.absent.length) t += '*الغايبين (' + ad(ab.absent.length) + '):* ' + ab.absent.map(x => x.name + (x.days ? ' (غاب ' + dayW(x.days) + ')' : '')).join('، ') + '\n';
     });
     return t;
@@ -938,18 +990,20 @@ $('bkBtn').addEventListener('click', () => {
     /* محفظة الفصل (من الجدول اللي بيبعته برنامج الاختبارات) — بتجمّع فصولها سواء اختبرت على جزء أو سورة، مش حسب المختبِرة */
     const TM = []; rosters.forEach(x => (Array.isArray(x.teachers) ? x.teachers : []).forEach(i => { if(i && i.c && i.t) TM.push(i); }));
     const teacherOf = r => {
-      /* الفصل بيتنسب للمحفظة اللي الجدول بيقول إنه فصلها (مش الاسم المكتوب في الاختبار)؛ الاسم المكتوب بيتاخد بس لو الفصل مش في الجدول */
-      const k = clsKey(r.className), m = TM.filter(i => clsKey(i.c) === k); if(!m.length) return null;
-      const bk = x => nrm(String(x || '').replace(/^\s*فرع\s+/, '')), br = bk(brOf(r));
-      const mb = br ? m.filter(i => bk(i.b) === br) : [];
-      /* الاختبار مسجّل في فرع معيّن والجدول مفيهوش الفصل ده في الفرع ده (بس في فرع تاني): مانخدش محفظة فرع تاني، نعتمد على اسم المحفظة المكتوب في الاختبار */
-      if(br && !mb.length && m.some(i => bk(i.b))) return null;
-      const cand = mb.length ? mb : m;
-      const names = []; cand.forEach(i => { const n = canonT(i.t); if(n && !names.some(x => nrm(x) === nrm(n))) names.push(n); });
-      if(names.length === 1) return names[0];
-      /* نفس اسم الفصل عند أكتر من محفظة ومعرفناش الفرع: ناخد اللي مكتوب في الاختبار لو موجود في الجدول، وإلا مانخمنش */
-      const sp = nrm(cleanT(r.supervisorName)); const hit = names.find(x => nrm(x) === sp);
-      return hit || null;
+      /* الفصل بيتنسب للمحفظة اللي في الجدول (باسم الفصل بالظبط وبالفرع)، فمفيش فصل بيروح لمحفظة تانية؛ الاسم المكتوب في الاختبار احتياطي بس لو الفصل مش في الجدول */
+      const bk = x => nrm(String(x || '').replace(/^\s*فرع\s+/, '')), br = bk(brOf(r)), sp = nrm(cleanT(r.supervisorName));
+      const pick = rows => {
+        const mb = br ? rows.filter(i => bk(i.b) === br) : [];
+        if(br && !mb.length && rows.some(i => bk(i.b))) return null; /* الفصل ده في الجدول في فرع تاني بس: مانخدش محفظة فرع تاني */
+        const cand = mb.length ? mb : rows, names = [];
+        cand.forEach(i => { const n = canonT(i.t); if(n && !names.some(x => nrm(x) === nrm(n))) names.push(n); });
+        if(names.length === 1) return names[0];
+        return names.find(x => nrm(x) === sp) || null; /* نفس الاسم عند أكتر من محفظة ومعرفناش الفرع: اللي مكتوب في الاختبار لو موجود في الجدول */
+      };
+      const exact = TM.filter(i => nrm(i.c) === nrm(r.className)); /* «فصل خالد» غير «خالد» */
+      if(exact.length) return pick(exact);
+      const k = clsKey(r.className), loose = TM.filter(i => clsKey(i.c) === k);
+      return loose.length ? pick(loose) : null;
     };
     /* لو نفس اسم المحفظة في أكتر من فرع (زي هاجر): بنكتب جنب الاسم اسم الفرع عشان يتفرقوا */
     const bk2 = x => nrm(String(x || '').replace(/^\s*فرع\s+/, ''));
@@ -960,6 +1014,7 @@ $('bkBtn').addEventListener('click', () => {
     results.filter(valid).forEach(r => { const n = teacherOf(r) || tName(r), b = brFor(r, n); if(!b) return; (BSET[nrm(n)] = BSET[nrm(n)] || {})[bk2(b)] = b; });
     const labT = r => { const n = teacherOf(r) || tName(r), b = brFor(r, n), bs = BSET[nrm(n)]; return (b && bs && Object.keys(bs).length > 1) ? n + ' — ' + (/^فرع\s/.test(b) ? b : 'فرع ' + b) : n; };
     list.forEach(r => {
+      if(/^غير محدد/.test(nrm(teacherOf(r) || tName(r)))) return; /* من غير محفظة: مش بتظهر في المحفظات */
       const t = labT(r);
       const c = String(r.className || '').trim() || 'بدون فصل';
       const isInd = indOfClass(c), kd = isInd ? 'i' : kindOf(r), tt = T[t] = T[t] || {}, cc = tt[c + '\u0001' + kd] = tt[c + '\u0001' + kd] || {name: c, kind: kd, pass: 0, fail: 0, subs: [], dates: [], tn: teacherOf(r) || tName(r), sups: [], ind: false, kinds: {}, studs: {}};
@@ -1011,21 +1066,26 @@ $('bkBtn').addEventListener('click', () => {
     }
     function showMonths(){
       cur = '__months';
-      const yms = []; results.filter(valid).forEach(r => { const m = dOf(r).slice(0, 7); if(/^\d{4}-\d{2}$/.test(m) && yms.indexOf(m) < 0) yms.push(m); });
+      let yms = []; results.filter(valid).forEach(r => { const m = dOf(r).slice(0, 7); if(/^\d{4}-\d{2}$/.test(m) && yms.indexOf(m) < 0) yms.push(m); });
       yms.sort();
+      /* الشهور متتابعة من أول شهر فيه اختبارات لحد الشهر الحالي (ديسمبر بعد نوفمبر، وبعد ديسمبر السنة الجديدة)، حتى لو شهر ماكانش فيه اختبارات */
+      const now0 = new Date(), nowYm = now0.getFullYear() + '-' + p2(now0.getMonth() + 1);
+      if(yms.length){ let yy = +yms[0].slice(0, 4), mm = +yms[0].slice(5, 7); const lastYm = yms[yms.length - 1] > nowYm ? yms[yms.length - 1] : nowYm, all = []; for(let g = 0; g < 600; g++){ const k = yy + '-' + p2(mm); all.push(k); if(k >= lastYm) break; mm++; if(mm > 12){ mm = 1; yy++; } } yms = all; }
       const cardOf = x => '<div class="tc-c' + (x.fail ? ' bad' : '') + '"><span><b>' + esc(x.name) + '</b>' + (x.ind ? '<span style="display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;background:#efe6ff;color:#5b3a9a;margin-inline-start:4px;">🧍 فردي</span>' : '') + ' ' + kindBadge(x) + (x.subs.length ? '<br><small style="color:#777;font-weight:600">' + esc(x.subs.join('، ')) + '</small>' : '') + (x.sups.some(v => nrm(v) !== nrm(x.tn)) ? '<br><small style="color:#b02a2a;font-weight:700">⚠️ المكتوب في «اسم المحفظ/ة» وقت الاختبار: ' + esc(x.sups.join('، ')) + '</small>' : '') + (x.dates.length ? '<br><small style="color:#555;font-weight:700">🗓️ تاريخ الاختبار: ' + esc(x.dates.slice().sort().map(d => ad(d.slice(8) + '/' + d.slice(5, 7))).join('، ')) + '</small>' : '') + '</span>' + (x.ind ? '<span style="text-align:center;font-weight:800;line-height:1.5"><span style="color:#555;font-size:13px">' + ad(x.pass + x.fail) + ' طالب/ة</span><br><span class="tc-ok">✅ ' + ad(x.pass) + ' ناجح</span><br><span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">❌ ' + ad(x.fail) + ' راسب</span></span>' : '<span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">' + (x.fail ? 'راسب' : 'ناجح') + '</span>') + '</div>';
       box.innerHTML = TOPBTN('tcClose2') + '<h2>📅 الاختبارات بترتيب الشهور</h2><div class="tc-sub">كل شهر وفيه فصوله اللي اختبرت، تحت اسم محفظتها</div>' +
-        (yms.length ? yms.map(ym => {
+        (yms.length ? yms.map((ym, ix) => {
           const M = tcData(ym), ns = Object.keys(M.T).sort((a, b) => a.localeCompare(b, 'ar'));
-          return '<div style="background:#0F2440;color:#F4EFDC;font-weight:800;font-size:17px;border-radius:10px;padding:8px 12px;margin:14px 0 8px">🗓️ ' + esc(M.month) + '</div>' +
-            ns.map(n => {
+          const yh = (ix === 0 || yms[ix - 1].slice(0, 4) !== ym.slice(0, 4)) ? '<div style="text-align:center;font-weight:800;font-size:19px;color:#C79636;margin:18px 0 0;border-bottom:2px solid #C79636;padding-bottom:4px">📆 سنة ' + ad(ym.slice(0, 4)) + '</div>' : '';
+          return yh + '<div ' + (ym === nowYm ? 'id="tcCurM" ' : '') + 'style="background:#0F2440;color:#F4EFDC;font-weight:800;font-size:17px;border-radius:10px;padding:8px 12px;margin:14px 0 8px">🗓️ ' + esc(M.month) + '</div>' +
+            (ns.length ? ns.map(n => {
               const cs = Object.keys(M.T[n]).sort((a, b) => M.T[n][a].name.localeCompare(M.T[n][b].name, 'ar') || (M.T[n][a].kind === 's' ? 1 : 0) - (M.T[n][b].kind === 's' ? 1 : 0));
               return '<div style="font-weight:800;color:#0F2440;margin:8px 0 6px">👩‍🏫 ' + esc(n) + '</div>' + cs.map(c => cardOf(M.T[n][c])).join('');
-            }).join('');
+            }).join('') : '<div style="text-align:center;padding:10px;color:#888">مفيش اختبارات الشهر ده</div>');
         }).join('') : '<div style="text-align:center;padding:20px;color:#777">مفيش اختبارات لسه.</div>') +
         '<button type="button" class="tc-b" id="tcBack">↩ كل المحفظات</button><button type="button" class="tc-b" id="tcClose">إغلاق</button>';
       box.querySelector('#tcBack').onclick = showList;
       box.querySelector('#tcClose').onclick = close; box.querySelector('#tcClose2').onclick = close;
+      const cm = box.querySelector('#tcCurM'); if(cm){ try{ cm.scrollIntoView({block: 'center'}); }catch(e){} }
     }
     window.__tcRefresh = () => { if(!document.getElementById('tcOv')) return; load(); if(cur === '__months') showMonths(); else if(cur && D.T[cur]) showTeacher(cur); else showList(); };
     showList();
@@ -1076,14 +1136,26 @@ $('bkBtn').addEventListener('click', () => {
     }
     return _cmMap[nrm(n)] || n;
   }
-  const tName = r => canonT(r.supervisorName) || 'غير محددة';
+  /* اختبار من غير اسم محفظة: بيتنسب لمحفظة نفس الفصل (لو الفصل ليه محفظة واحدة بس معروفة)، وإلا يفضل «غير محددة» */
+  let _csRes = null, _csMap = {};
+  function classSupOf(r){
+    const bk = x => nrm(String(x || '').replace(/^\s*فرع\s+/, ''));
+    if(_csRes !== results){ _csRes = results; _csMap = {};
+      results.forEach(x => { const sv = canonT(x.supervisorName); if(!sv || !x.className) return; const k = clsKey(x.className), b = bk(x.branch);
+        [k + '|*', b ? k + '|' + b : ''].forEach(kk => { if(kk){ (_csMap[kk] = _csMap[kk] || {})[nrm(sv)] = sv; } }); });
+    }
+    const k = clsKey(r.className || ''), b = bk(r.branch); if(!k) return '';
+    const pick = m => { const ks = m ? Object.keys(m) : []; return ks.length === 1 ? m[ks[0]] : ''; };
+    return (b && pick(_csMap[k + '|' + b])) || pick(_csMap[k + '|*']) || '';
+  }
+  const tName = r => canonT(r.supervisorName) || classSupOf(r) || 'غير محددة';
   const cName = r => String(r.className || '').trim() || 'بدون فصل';
   const brOf = r => String(r.branch || '').trim();
   /* اسم المحفظة: لو نفس الاسم في أكتر من فرع، بيتكتب جنبه اسم الفرع عشان يتفرقوا */
   const tKey = r => { const n = tName(r), b = brOf(r); if(!b) return n; const bs = new Set(results.filter(valid).filter(x => tName(x) === n).map(brOf).filter(Boolean)); return bs.size > 1 ? n + ' — ' + (/^فرع\s/.test(b) ? b : 'فرع ' + b) : n; };
   const r1 = n => Math.round(n * 10) / 10;
   const avgOf = a => { const v = a.map(pctOf).filter(x => x !== null); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : null; };
-  const grTxt = (p, sur) => p === null ? '—' : (sur ? ad(Math.round(p / 10)) + '/١٠' : ad(Math.round(p)) + '/١٠٠');
+  const grTxt = (p, sur) => p === null ? '—' : (sur ? '١٠/' + ad(Math.round(p / 10)) : '١٠٠/' + ad(Math.round(p)));
   const dLbl = d => ad(d.slice(8) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4));
   const mLbl = m => MONTHS[Number(m.slice(5)) - 1] + ' ' + ad(m.slice(0, 4));
   const prevM = m => { const y = Number(m.slice(0, 4)), mo = Number(m.slice(5)); const d = new Date(y, mo - 2, 1); return d.getFullYear() + '-' + p2(d.getMonth() + 1); };
