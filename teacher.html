@@ -357,16 +357,16 @@ function whereOf(r){
 }
 function statusLabel(r){ const pass = r.status === 'ناجح', f = r.gender === 'f' || r.gender === 'أنثى' || r.gender === 'بنت'; return f ? (pass ? 'ناجحة' : 'راسبة') : (pass ? 'ناجح' : 'راسب'); }
 function groupRows(rows){
-  const byC = {}, kinds = {}; rows.forEach(r => { const kd = r.app === 'surah' ? 's' : 'j'; (byC[r.className + '\u0001' + kd] = byC[r.className + '\u0001' + kd] || []).push(r); (kinds[r.className] = kinds[r.className] || {})[kd] = 1; });
+  const byC = {}, kinds = {}; rows.forEach(r => { const kd = r.app === 'surah' ? 's' : 'j', _k = r.className + '\u0001' + kd + '\u0001' + String(r.date || '').slice(0, 10); (byC[_k] = byC[_k] || []).push(r); (kinds[r.className] = kinds[r.className] || {})[kd] = 1; }); /* كل يوم اختبار في كارت لوحده */
   const hasT = Object.keys(teachersMap).length > 0, byT = {}, order = [];
-  Object.keys(byC).sort((a, b) => { const x = a.split('\u0001'), y = b.split('\u0001'); return x[0].localeCompare(y[0], 'ar') || x[1].localeCompare(y[1]); }).forEach(key => {
-    const cn = key.split('\u0001')[0], kd = key.split('\u0001')[1];
+  Object.keys(byC).sort((a, b) => { const x = a.split('\u0001'), y = b.split('\u0001'); return x[0].localeCompare(y[0], 'ar') || x[1].localeCompare(y[1]) || String(y[2]).localeCompare(String(x[2])); }).forEach(key => {
+    const cn = key.split('\u0001')[0], kd = key.split('\u0001')[1], dt = key.split('\u0001')[2];
     const t = teachersMap[clsKey(cn)] || (hasT ? 'معلمة غير محددة' : '');
     if(!byT[t]){ byT[t] = []; order.push(t); }
     const m = new Map(); byC[key].forEach(r => { const k = nrm(r.student); if(!m.has(k)) m.set(k, []); m.get(k).push(r); });
     const stu = Array.from(m.values()); stu.forEach(g => g.sort((a, b) => (b.ts || 0) - (a.ts || 0)));
     stu.sort((a, b) => String(a[0].student).localeCompare(String(b[0].student), 'ar'));
-    byT[t].push({name: cn + (Object.keys(kinds[cn]).length > 1 ? (kd === 's' ? ' — 📖 اختبار على سورة' : ' — 📚 اختبار على جزء') : ''), rows: byC[key], students: stu});
+    byT[t].push({name: cn + (Object.keys(kinds[cn]).length > 1 ? (kd === 's' ? ' — 📖 اختبار على سورة' : ' — 📚 اختبار على جزء') : '') + (dt ? ' — 🗓️ ' + AD(dt.slice(8) + '/' + dt.slice(5, 7) + '/' + dt.slice(0, 4)) : ''), rows: byC[key], students: stu});
   });
   order.sort((a, b) => a.localeCompare(b, 'ar'));
   return order.map(t => ({teacher: t, classes: byT[t]}));
@@ -449,7 +449,7 @@ function render(){
     const gs = Array.from(m.values()); gs.forEach(g => g.sort((a, b) => (b.ts || 0) - (a.ts || 0)));
     return gs.sort((a, b) => String(a[0].student).localeCompare(String(b[0].student), 'ar')); };
   const by = {};
-  shown.forEach(r => { const key = r.className + '||' + (r.app === 'surah' ? 's' : 'j'); (by[key] = by[key] || []).push(r); });
+  shown.forEach(r => { const key = r.className + '||' + (r.app === 'surah' ? 's' : 'j') + '||' + String(r.date || '').slice(0, 10); (by[key] = by[key] || []).push(r); });
   const kindInfo = (rows, kd) => {
     const set = [], add = x => { if(x && set.indexOf(x) === -1) set.push(x); };
     rows.forEach(r => {
@@ -458,15 +458,15 @@ function render(){
     });
     return set.length ? '<div class="csum"><b>' + (kd === 's' ? 'السور المختبَر فيها: ' : 'الأجزاء المختبَر فيها: ') + '</b>' + set.map(esc).join(' • ') + '</div>' : '';
   };
-  $('list').innerHTML = viewMode === 'list' ? compactHtml(shown) : Object.keys(by).sort((a, b) => { const x = a.split('||'), y = b.split('||'); return x[0].localeCompare(y[0], 'ar') || x[1].localeCompare(y[1]); }).map(key => {
-    const cn = key.split('||')[0], kd = key.split('||')[1];
+  $('list').innerHTML = viewMode === 'list' ? compactHtml(shown) : Object.keys(by).sort((a, b) => { const x = a.split('||'), y = b.split('||'); return x[0].localeCompare(y[0], 'ar') || x[1].localeCompare(y[1]) || String(y[2]).localeCompare(String(x[2])); }).map(key => {
+    const cn = key.split('||')[0], kd = key.split('||')[1], dt = key.split('||')[2];
     const rows = by[key].sort((a, b) => (b.ts || 0) - (a.ts || 0));
     const o = rows.filter(r => r.status === 'ناجح').length;
     const isG = r => { const p = pctOf(r); return p !== null && p >= 95; }; const latest = {}; rows.forEach(r => { const k = nrm(r.student); if(!latest[k] || (r.ts || 0) > (latest[k].ts || 0)) latest[k] = r; });
     const wk = rows.filter(r => !isG(latest[nrm(r.student)])), gd = rows.filter(r => isG(latest[nrm(r.student)]));
     const sRows = rows.filter(r => r.app === 'surah'), jRows = rows.filter(r => r.app !== 'surah');
-    const both = Object.keys(by).some(k2 => k2 !== key && k2.split('||')[0] === cn);
-    return `<div class="cls"><h3><span style="font-size:17px">${esc(cn)}${both ? ' — ' + (kd === 's' ? '📖 اختبار على سورة' : '📚 اختبار على جزء') : ''} </span><span>✅ ${o} ناجح · ❌ ${rows.length - o} راسب</span></h3>` +
+    const both = Object.keys(by).some(k2 => k2.split('||')[0] === cn && k2.split('||')[1] !== kd);
+    return `<div class="cls"><h3><span style="font-size:17px">${esc(cn)}${both ? ' — ' + (kd === 's' ? '📖 اختبار على سورة' : '📚 اختبار على جزء') : ''}${dt ? ' — 🗓️ ' + AD(dt.slice(8) + '/' + dt.slice(5, 7) + '/' + dt.slice(0, 4)) : ''} </span><span>✅ ${o} ناجح · ❌ ${rows.length - o} راسب</span></h3>` +
       kindInfo(sRows, 's') + kindInfo(jRows, 'j') + sec('⚠️ الضعاف (أقل من ٩٥٪)', wk) + sec('🌟 الشطار (٩٥٪ فأكثر)', gd) + '</div>';
   }).join('');
 
