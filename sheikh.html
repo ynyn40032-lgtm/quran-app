@@ -904,6 +904,17 @@ $('bkBtn').addEventListener('click', () => {
       const c = g('crCls').value; if(!c){ clsDay.textContent = ''; return; }
       const dn = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
       const ds = [...new Set(results.filter(valid).filter(r => (r.className || 'بدون فصل') === c).map(dOf).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)))].sort().reverse();
+      /* لو التاريخ المختار حاليًا مفيهوش اختبار للفصل ده (فالتقرير هيطلع فاضي)، التاريخ يروح لآخر يوم اختبر فيه الفصل */
+      if(ds.length && !auto){
+        const f = g('crFrom').value, t = g('crTo').value;
+        if(!ds.some(d => (!f || d >= f) && (!t || d <= t))){
+          const d = ds[0];
+          g('crDay').value = d; g('crFrom').value = d; g('crTo').value = d;
+          g('crWeekSel').value = ''; g('crMonthSel').value = '';
+          g('crDaySel').value = [...g('crDaySel').options].some(o => o.value === d) ? d : '';
+          redraw();
+        }
+      }
       clsDay.textContent = ds.length ? 'اختبر: ' + ds.map(d => dn[new Date(d + 'T12:00:00').getDay()] + ' ' + ad(d.slice(8) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4))).join(' • ') : '';
     };
     g('crCls').addEventListener('change', showClsDay);
