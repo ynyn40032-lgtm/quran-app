@@ -671,8 +671,17 @@ $('bkBtn').addEventListener('click', () => {
     });
     return out;
   }
+  /* تاريخ راس التقرير: لو اخترتي فصل بيطلع يوم وتاريخ اختبار الفصل بالظبط، وإلا بيفضل تاريخ النهارده زي ما كان */
+  const DAYN = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+  function dateLine(o, gs){
+    const todayTxt = ad(new Date().toLocaleDateString('en-GB'));
+    if(!o || !o.cls || !gs || !gs.length) return todayTxt;
+    const ds = [...new Set([].concat(...gs.map(g => g.rows.map(dOf))).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)))].sort();
+    if(!ds.length) return todayTxt;
+    return ds.map(d => DAYN[new Date(d + 'T12:00:00').getDay()] + ' ' + ad(d.slice(8) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4))).join(' • ');
+  }
   function bodyHtml(o){
-    const gs = compute(o), today = ad(new Date().toLocaleDateString('en-GB'));
+    const gs = compute(o), today = dateLine(o, gs);
     let h = '<div class="cr-head"><div class="c">مركز الأمين الثقافي التربوي</div><div class="t">تقرير إجمالي بنتائج الفصول — ' + (o.surah ? 'اختبارات القرآن واختبار على سورة' : 'اختبارات القرآن') + '</div><div class="d">' + today + '</div></div>';
     if(!gs.length) return h + '<div style="text-align:center;padding:20px;color:#777;font-weight:700">' + ((o.from && o.from === o.to) ? 'لا يوجد اختبار لليوم ده' + (o.cls ? '<div style="font-size:15px;margin-top:6px;color:#8A6A20">لو عايزة كل اختبارات الفصل ده، اضغطي زرار «كل الأيام» فوق.</div>' : '') : (o.from ? 'لا يوجد اختبار في الفترة دي' : 'مفيش اختبارات تطابق الاختيار ده.')) + '</div>';
     const AB = absentMap(gs, o), abShown = {};
@@ -724,7 +733,7 @@ $('bkBtn').addEventListener('click', () => {
   }
   function textReport(o){
     const gs = compute(o); if(!gs.length) return '';
-    let t = '*مركز الأمين الثقافي التربوي*\n*تقرير إجمالي بنتائج الفصول*\n' + ad(new Date().toLocaleDateString('en-GB')) + '\n';
+    let t = '*مركز الأمين الثقافي التربوي*\n*تقرير إجمالي بنتائج الفصول*\n' + dateLine(o, gs) + '\n';
     const kinds = {}; gs.forEach(g => { (kinds[g.name] = kinds[g.name] || new Set()).add(kindOf(g.rows[0])); });
     const AB = absentMap(gs, o), abShown = {};
     gs.forEach(g => {
