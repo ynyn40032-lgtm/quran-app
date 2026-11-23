@@ -887,6 +887,17 @@ $('bkBtn').addEventListener('click', () => {
     ['crCls', 'crLatest', 'crPages', 'crSurah'].forEach(id => g(id).addEventListener('change', redraw));
     g('crBr').addEventListener('change', () => { g('crCls').value = ''; if(g('crCls').__sync) g('crCls').__sync(); redraw(); });
     searchable(g('crCls'), '🔎 بحث باسم الفصل');
+    /* عرض بس (من غير أي تغيير في الفلاتر أو التقرير): تحت اسم الفصل يظهر اليوم والتاريخ اللي اختبر فيه */
+    const clsDay = document.createElement('small');
+    clsDay.style.cssText = 'font-weight:800;color:#8A6A20;line-height:1.6';
+    g('crCls').parentNode.appendChild(clsDay);
+    const showClsDay = () => {
+      const c = g('crCls').value; if(!c){ clsDay.textContent = ''; return; }
+      const dn = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+      const ds = [...new Set(results.filter(valid).filter(r => (r.className || 'بدون فصل') === c).map(dOf).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)))].sort().reverse();
+      clsDay.textContent = ds.length ? 'اختبر: ' + ds.map(d => dn[new Date(d + 'T12:00:00').getDay()] + ' ' + ad(d.slice(8) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4))).join(' • ') : '';
+    };
+    g('crCls').addEventListener('change', showClsDay);
     // افتراضي: الأسبوع الحالي
     g('crWeekSel').value = ''; fillRange();
     redraw();
