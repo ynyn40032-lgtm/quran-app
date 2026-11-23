@@ -918,6 +918,15 @@ $('bkBtn').addEventListener('click', () => {
       clsDay.textContent = ds.length ? 'اختبر: ' + ds.map(d => dn[new Date(d + 'T12:00:00').getDay()] + ' ' + ad(d.slice(8) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4))).join(' • ') : '';
     };
     g('crCls').addEventListener('change', showClsDay);
+    /* لما تختاري تاريخ/يوم: يطلعلك كل الفصول اللي اختبرت في اليوم ده (فلتر الفصل بيتفك) */
+    const allClassesThatDay = always => {
+      const d = g('crDay').value, c = g('crCls').value; if(!d || !c) return;
+      if(!always && results.filter(valid).some(r => (r.className || 'بدون فصل') === c && dOf(r) === d)) return;
+      g('crCls').value = ''; if(g('crCls').__sync) g('crCls').__sync(); clsDay.textContent = ''; redraw();
+    };
+    ['change', 'input'].forEach(ev => g('crDay').addEventListener(ev, () => allClassesThatDay(true)));
+    g('crDay').addEventListener('click', () => allClassesThatDay(false));
+    g('crDaySel').addEventListener('change', () => { if(g('crDaySel').value && g('crCls').value){ g('crCls').value = ''; if(g('crCls').__sync) g('crCls').__sync(); clsDay.textContent = ''; redraw(); } });
     // افتراضي: الأسبوع الحالي
     g('crWeekSel').value = ''; fillRange();
     redraw();
