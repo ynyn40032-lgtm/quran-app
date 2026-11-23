@@ -648,30 +648,33 @@ $('bkBtn').addEventListener('click', () => {
     names.forEach(cn => {
       const ros = rosters.filter(x => clsKey(x.className) === clsKey(cn) && (!o.br || !x.branch || String(x.branch).trim() === o.br));
       if(!ros.length) return;
-      const roster = [], abs = {};
+      const roster = [], abs = {}, po = {};
       ros.forEach(x => {
         (Array.isArray(x.students) ? x.students : []).forEach(n => { n = String(n || '').trim(); if(n && !roster.some(m => sameStu(nm2(m), nm2(n)))) roster.push(n); });
         (Array.isArray(x.absences) ? x.absences : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; const set = abs[k] || (abs[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(inR(String(d)) && set.indexOf(d) < 0) set.push(d); }); });
+        (Array.isArray(x.postponed) ? x.postponed : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; const set = po[k] || (po[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(inR(String(d)) && set.indexOf(d) < 0) set.push(d); }); });
       });
-      const daysOf = n => { const k = nm2(n); let c = 0; Object.keys(abs).forEach(a => { if(sameStu(k, a)) c = Math.max(c, abs[a].length); }); return c; };
+      const poOf = k => { let r = []; Object.keys(po).forEach(a => { if(sameStu(k, a)) r = r.concat(po[a]); }); return r; };
+      const daysOf = n => { const k = nm2(n), pd = poOf(k); let c = 0; Object.keys(abs).forEach(a => { if(sameStu(k, a)) c = Math.max(c, abs[a].filter(d => pd.indexOf(d) < 0).length); }); return c; };
       const tested = []; gs.filter(g => g.name === cn).forEach(g => g.rows.forEach(r => { const k = nm2(r.student); if(k && tested.indexOf(k) < 0) tested.push(k); }));
-      const used = {}, absent = [];
+      const used = {}, absent = [], postponed = [];
       roster.forEach(n => {
         const k = nm2(n); let hit = -1;
         for(let i = 0; i < tested.length; i++){ if(!used[i] && sameStu(k, tested[i])){ hit = i; break; } }
         if(hit >= 0) used[hit] = 1;
         const d = daysOf(n);
-        if(hit < 0) absent.push({name: n, days: d, tested: false});
+        if(hit < 0 && poOf(k).length) postponed.push({name: n, days: d}); /* حضر ومكنش حافظ فاتأجّل: مش غايب */
+        else if(hit < 0) absent.push({name: n, days: d, tested: false});
         else if(d) absent.push({name: n, days: d, tested: true}); /* غاب في الفترة دي حتى لو اختبر بعدها */
       });
-      out[cn] = {absent, total: roster.length, daysOf};
+      out[cn] = {absent, postponed, total: roster.length, daysOf};
     });
     return out;
   }
   function bodyHtml(o){
     const gs = compute(o), today = ad(new Date().toLocaleDateString('en-GB'));
     let h = '<div class="cr-head"><div class="c">مركز الأمين الثقافي التربوي</div><div class="t">تقرير إجمالي بنتائج الفصول — ' + (o.surah ? 'اختبارات القرآن واختبار على سورة' : 'اختبارات القرآن') + '</div><div class="d">' + today + '</div></div>';
-    if(!gs.length) return h + '<div style="text-align:center;padding:20px;color:#777;font-weight:700">' + ((o.from && o.from === o.to) ? 'لا يوجد اختبار لليوم ده' : (o.from ? 'لا يوجد اختبار في الفترة دي' : 'مفيش اختبارات تطابق الاختيار ده.')) + '</div>';
+    if(!gs.length) return h + '<div style="text-align:center;padding:20px;color:#777;font-weight:700">' + ((o.from && o.from === o.to) ? 'لا يوجد اختبار لليوم ده' + (o.cls ? '<div style="font-size:15px;margin-top:6px;color:#8A6A20">لو عايزة كل اختبارات الفصل ده، اضغطي زرار «كل الأيام» فوق.</div>' : '') : (o.from ? 'لا يوجد اختبار في الفترة دي' : 'مفيش اختبارات تطابق الاختيار ده.')) + '</div>';
     const AB = absentMap(gs, o), abShown = {};
     gs.forEach((g, gi) => {
       let pass = 0, fail = 0;
@@ -690,9 +693,9 @@ $('bkBtn').addEventListener('click', () => {
         ' <span style="color:#8A6A20">— المحفظ/ة: ' + (sv.length ? esc(sv.join('، ').replace(/^\s*أ\s*[.\/]\s*/, '')) : 'غير محددة') + '</span>' +
         (sj.length ? ' <span style="color:#1d4f8a">— ' + esc(sj.join('، ')) + '</span>' : '') +
         (ss.length ? ' <span style="color:#1d4f8a">— السورة: ' + esc(ss.join('، ')) + '</span>' : '') +
-        ' <small>(عدد الطلاب: ' + ad(g.rows.length) + ' — ناجح: ' + ad(pass) + ' — راسب: ' + ad(fail) + (ab ? ' — <span style="color:#8A1F1F">غايب: ' + ad(ab.absent.length) + '</span>' : '') + ')</small></h3>' +
+        ' <small>(' + (ab0 && ab0.total ? 'عدد طلاب الفصل: ' + ad(ab0.total) + ' — اختبر: ' + ad(new Set(g.rows.map(r => nm2(r.student))).size) : 'عدد الطلاب: ' + ad(g.rows.length)) + ' — ناجح: ' + ad(pass) + ' — راسب: ' + ad(fail) + (ab ? ' — <span style="color:#8A1F1F">غايب: ' + ad(ab.absent.length) + '</span>' : '') + (ab && ab.postponed.length ? ' — <span style="color:#8A6A20">مؤجل: ' + ad(ab.postponed.length) + '</span>' : '') + ')</small></h3>' +
         '<table><thead><tr><th>م</th><th>الإسم</th><th>عدد الأخطاء</th><th>الدرجة</th><th>النتيجة</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-        (ab ? (ab.absent.length ? '<div class="cr-abs"><b>الغايبين (' + ad(ab.absent.length) + '):</b> ' + ab.absent.map((x, k) => ad(k + 1) + '. ' + esc(x.name) + (x.days ? ' <small>(غاب: ' + dayW(x.days) + (x.tested ? ' — واختبر بعدها' : '') + ')</small>' : '')).join(' &nbsp;•&nbsp; ') + '</div>' : '<div class="cr-abs ok">✅ مفيش غايبين (كل طلاب الفصل اختبروا)</div>') : '') + '</div>';
+        (ab ? (ab.absent.length ? '<div class="cr-abs"><b>الغايبين (' + ad(ab.absent.length) + '):</b> ' + ab.absent.map((x, k) => ad(k + 1) + '. ' + esc(x.name) + (x.days ? ' <small>(غاب: ' + dayW(x.days) + (x.tested ? ' — واختبر بعدها' : '') + ')</small>' : '')).join(' &nbsp;•&nbsp; ') + '</div>' : (ab.postponed.length ? '' : '<div class="cr-abs ok">✅ مفيش غايبين (كل طلاب الفصل اختبروا)</div>')) + (ab.postponed.length ? '<div class="cr-abs" style="border-color:#8A6A20;background:#fff8e6;color:#7a5a10"><b>⏳ المؤجلين (' + ad(ab.postponed.length) + ') — حضروا ومكنوش حافظين:</b> ' + ab.postponed.map((x, k) => ad(k + 1) + '. ' + esc(x.name) + (x.days ? ' <small>(غاب قبل كده: ' + dayW(x.days) + ')</small>' : '')).join(' &nbsp;•&nbsp; ') + '</div>' : '') : '') + '</div>';
     });
     return h;
   }
@@ -727,9 +730,10 @@ $('bkBtn').addEventListener('click', () => {
     gs.forEach(g => {
       let ok = 0; g.rows.forEach(r => { if(passOf(r)) ok++; });
       const ab = (AB[g.name] && !abShown[g.name]) ? (abShown[g.name] = AB[g.name]) : null;
-      t += '\n*الفصل: ' + g.name + (indOfClass(g.name) ? ' — فردي' : '') + (kinds[g.name].size > 1 ? (kindOf(g.rows[0]) === 's' ? ' — اختبار على سورة' : ' — اختبار على جزء') : '') + '* (ناجح ' + ad(ok) + ' — راسب ' + ad(g.rows.length - ok) + (ab ? ' — غايب ' + ad(ab.absent.length) : '') + ')\n';
+      t += '\n*الفصل: ' + g.name + (indOfClass(g.name) ? ' — فردي' : '') + (kinds[g.name].size > 1 ? (kindOf(g.rows[0]) === 's' ? ' — اختبار على سورة' : ' — اختبار على جزء') : '') + '* (ناجح ' + ad(ok) + ' — راسب ' + ad(g.rows.length - ok) + (ab ? ' — غايب ' + ad(ab.absent.length) : '') + (ab && ab.postponed.length ? ' — مؤجل ' + ad(ab.postponed.length) : '') + ')\n';
       g.rows.forEach((r, i) => { const n = Number(r.grade); t += ad(i + 1) + '. ' + r.student + ' — ' + (isNaN(n) ? r.grade : ad(isS(r) ? 10 : 100) + '/' + ad(n)) + ' — ' + (passOf(r) ? (fem(r) ? 'ناجحة' : 'ناجح') : (fem(r) ? 'راسبة' : 'راسب')) + '\n'; });
       if(ab && ab.absent.length) t += '*الغايبين (' + ad(ab.absent.length) + '):* ' + ab.absent.map(x => x.name + (x.days ? ' (غاب ' + dayW(x.days) + ')' : '')).join('، ') + '\n';
+      if(ab && ab.postponed.length) t += '*⏳ المؤجلين (' + ad(ab.postponed.length) + ') — حضروا ومكنوش حافظين:* ' + ab.postponed.map(x => x.name).join('، ') + '\n';
     });
     return t;
   }
@@ -878,7 +882,7 @@ $('bkBtn').addEventListener('click', () => {
       else { auto = false; g('crDay').value = d; g('crFrom').value = d; g('crTo').value = d; }
       redraw();
     });
-    ['change', 'input'].forEach(ev => g('crDay').addEventListener(ev, () => { const d = g('crDay').value; if(!d) return; auto = false; g('crFrom').value = d; g('crTo').value = d; g('crWeekSel').value = ''; g('crMonthSel').value = ''; g('crDaySel').value = [...g('crDaySel').options].some(o => o.value === d) ? d : ''; redraw(); }));
+    ['change', 'input', 'blur', 'click'].forEach(ev => g('crDay').addEventListener(ev, () => { const d = g('crDay').value; if(!d) return; auto = false; g('crFrom').value = d; g('crTo').value = d; g('crWeekSel').value = ''; g('crMonthSel').value = ''; g('crDaySel').value = [...g('crDaySel').options].some(o => o.value === d) ? d : ''; redraw(); }));
     g('crAll').onclick = () => { g('crDaySel').value = ''; g('crWeekSel').value = ''; g('crMonthSel').value = ''; auto = true; fillRange(); redraw(); };
     ['crCls', 'crLatest', 'crPages', 'crSurah'].forEach(id => g(id).addEventListener('change', redraw));
     g('crBr').addEventListener('change', () => { g('crCls').value = ''; if(g('crCls').__sync) g('crCls').__sync(); redraw(); });
@@ -1031,6 +1035,23 @@ $('bkBtn').addEventListener('click', () => {
     Object.keys(T).forEach(t => Object.keys(T[t]).forEach(k => { const cc = T[t][k]; if(!cc.ind) return; cc.pass = 0; cc.fail = 0; Object.keys(cc.studs).forEach(sk => { if(passOf(cc.studs[sk])) cc.pass++; else cc.fail++; }); }));
     return {month: MONTHS[now.getMonth()] + ' ' + ad(now.getFullYear()), T};
   }
+  /* الفصل الفردي: من غير أسماء — كام ناجح وكام راسب على الجزء، وكام ناجح وكام راسب على السورة، وتحت كل نوع الجزء/السورة والتواريخ */
+  const indList = x => {
+    const rs = Object.keys(x.studs || {}).map(k => x.studs[k]);
+    if(!rs.length) return '';
+    const blk = (kd, rows) => {
+      if(!rows.length) return '';
+      const sur = kd === 's', ok = rows.filter(r => passOf(r)).length, no = rows.length - ok, subs = [], ds = [];
+      rows.forEach(r => { const sb = sur ? subject(r) : (String(r.testType || '').trim() || subject(r)); if(sb && subs.indexOf(sb) < 0) subs.push(sb); /* الجزء: رقم الجزء بس من غير حزب/ربع */ const dd = dOf(r); if(dd && ds.indexOf(dd) < 0) ds.push(dd); });
+      ds.sort();
+      return '<div style="margin-top:6px;padding:7px 9px;border-radius:10px;text-align:right;' + (sur ? 'background:#e6efff' : 'background:#f6ecd2') + '">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:800;font-size:14px;' + (sur ? 'color:#1d4f8a' : 'color:#8A6A20') + '"><span>' + (sur ? '📖 اختبار على سورة' : '📚 اختبار على جزء') + ' <small style="font-weight:700">(' + ad(rows.length) + ' طالب/ة)</small></span>' +
+        '<span><span class="tc-ok">✅ ' + ad(ok) + ' ناجح</span> · <span class="' + (no ? 'tc-no' : 'tc-ok') + '">❌ ' + ad(no) + ' راسب</span></span></div>' +
+        (subs.length ? '<div style="font-size:12.5px;color:#555;font-weight:600;margin-top:3px">' + esc(subs.join('، ')) + '</div>' : '') +
+        (ds.length ? '<div style="font-size:12.5px;color:#555;font-weight:700;margin-top:2px">🗓️ ' + esc(ds.map(d => ad(d.slice(8) + '/' + d.slice(5, 7))).join('، ')) + '</div>' : '') + '</div>';
+    };
+    return blk('j', rs.filter(r => kindOf(r) !== 's')) + blk('s', rs.filter(r => kindOf(r) === 's'));
+  };
   const kindBadge = x => {
     const one = sur => '<span style="display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;margin-inline-start:4px;' + (sur ? 'background:#e6efff;color:#1d4f8a' : 'background:#f6ecd2;color:#8A6A20') + '">' + (sur ? '📖 اختبار على سورة' : '📚 اختبار على جزء') + '</span>';
     if(x.kind === 'i') return (x.kinds.j ? one(false) : '') + (x.kinds.s ? one(true) : '');
@@ -1059,7 +1080,7 @@ $('bkBtn').addEventListener('click', () => {
       const cs = Object.keys(D.T[n]).sort((a, b) => D.T[n][a].name.localeCompare(D.T[n][b].name, 'ar') || (D.T[n][a].kind === 's' ? 1 : 0) - (D.T[n][b].kind === 's' ? 1 : 0)), nf = cs.filter(c => D.T[n][c].fail).length;
       box.innerHTML = TOPBTN('tcClose2') + '<h2>' + esc(n) + ' — شهر ' + esc(D.month) + '</h2><div class="tc-sub">الفصول اللي اختبرت الشهر ده</div>' +
         (nf ? '<div class="tc-sum">عدد الفصول: ' + ad(cs.length) + ' — الراسب منها: ' + ad(nf) + '</div>' : '<div class="tc-all">✅ كل الفصول ناجحة (' + ad(cs.length) + ' فصل)</div>') +
-        cs.map(c => { const x = D.T[n][c], sur = x.kind === 's'; return '<div class="tc-c' + (x.fail ? ' bad' : '') + '"><span><b>' + esc(x.name) + '</b>' + (x.ind ? '<span style="display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;background:#efe6ff;color:#5b3a9a;margin-inline-start:4px;">🧍 فردي</span>' : '') + ' ' + kindBadge(x) + (x.subs.length ? '<br><small style="color:#777;font-weight:600">' + esc(x.subs.join('، ')) + '</small>' : '') + (x.sups.some(v => nrm(v) !== nrm(x.tn)) ? '<br><small style="color:#b02a2a;font-weight:700">⚠️ المكتوب في «اسم المحفظ/ة» وقت الاختبار: ' + esc(x.sups.join('، ')) + '</small>' : '') + (x.dates.length ? '<br><small style="color:#555;font-weight:700">🗓️ تاريخ الاختبار: ' + esc(x.dates.slice().sort().map(d => ad(d.slice(8) + '/' + d.slice(5, 7))).join('، ')) + '</small>' : '') + '</span>' + (x.ind ? '<span style="text-align:center;font-weight:800;line-height:1.5"><span style="color:#555;font-size:13px">' + ad(x.pass + x.fail) + ' طالب/ة</span><br><span class="tc-ok">✅ ' + ad(x.pass) + ' ناجح</span><br><span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">❌ ' + ad(x.fail) + ' راسب</span></span>' : '<span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">' + (x.fail ? 'راسب' : 'ناجح') + '</span>') + '</div>'; }).join('') +
+        cs.map(c => { const x = D.T[n][c], sur = x.kind === 's'; return '<div class="tc-c' + (x.fail ? ' bad' : '') + '"><span><b>' + esc(x.name) + '</b>' + (x.ind ? '<span style="display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;background:#efe6ff;color:#5b3a9a;margin-inline-start:4px;">🧍 فردي</span>' : '') + ' ' + kindBadge(x) + (x.subs.length && !x.ind ? '<br><small style="color:#777;font-weight:600">' + esc(x.subs.join('، ')) + '</small>' : '') + (x.sups.some(v => nrm(v) !== nrm(x.tn)) ? '<br><small style="color:#b02a2a;font-weight:700">⚠️ المكتوب في «اسم المحفظ/ة» وقت الاختبار: ' + esc(x.sups.join('، ')) + '</small>' : '') + (x.dates.length && !x.ind ? '<br><small style="color:#555;font-weight:700">🗓️ تاريخ الاختبار: ' + esc(x.dates.slice().sort().map(d => ad(d.slice(8) + '/' + d.slice(5, 7))).join('، ')) + '</small>' : '') + (x.ind ? indList(x) : '') + '</span>' + (x.ind ? '<span style="text-align:center;font-weight:800;line-height:1.5"><span style="color:#555;font-size:13px">' + ad(x.pass + x.fail) + ' طالب/ة</span><br><span class="tc-ok">✅ ' + ad(x.pass) + ' ناجح</span><br><span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">❌ ' + ad(x.fail) + ' راسب</span></span>' : '<span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">' + (x.fail ? 'راسب' : 'ناجح') + '</span>') + '</div>'; }).join('') +
         '<button type="button" class="tc-b" id="tcBack">↩ كل المحفظات</button><button type="button" class="tc-b" id="tcClose">إغلاق</button>';
       box.querySelector('#tcBack').onclick = showList;
       box.querySelector('#tcClose').onclick = close; box.querySelector('#tcClose2').onclick = close;
@@ -1071,7 +1092,7 @@ $('bkBtn').addEventListener('click', () => {
       /* الشهور متتابعة من أول شهر فيه اختبارات لحد الشهر الحالي (ديسمبر بعد نوفمبر، وبعد ديسمبر السنة الجديدة)، حتى لو شهر ماكانش فيه اختبارات */
       const now0 = new Date(), nowYm = now0.getFullYear() + '-' + p2(now0.getMonth() + 1);
       if(yms.length){ let yy = +yms[0].slice(0, 4), mm = +yms[0].slice(5, 7); const lastYm = yms[yms.length - 1] > nowYm ? yms[yms.length - 1] : nowYm, all = []; for(let g = 0; g < 600; g++){ const k = yy + '-' + p2(mm); all.push(k); if(k >= lastYm) break; mm++; if(mm > 12){ mm = 1; yy++; } } yms = all; }
-      const cardOf = x => '<div class="tc-c' + (x.fail ? ' bad' : '') + '"><span><b>' + esc(x.name) + '</b>' + (x.ind ? '<span style="display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;background:#efe6ff;color:#5b3a9a;margin-inline-start:4px;">🧍 فردي</span>' : '') + ' ' + kindBadge(x) + (x.subs.length ? '<br><small style="color:#777;font-weight:600">' + esc(x.subs.join('، ')) + '</small>' : '') + (x.sups.some(v => nrm(v) !== nrm(x.tn)) ? '<br><small style="color:#b02a2a;font-weight:700">⚠️ المكتوب في «اسم المحفظ/ة» وقت الاختبار: ' + esc(x.sups.join('، ')) + '</small>' : '') + (x.dates.length ? '<br><small style="color:#555;font-weight:700">🗓️ تاريخ الاختبار: ' + esc(x.dates.slice().sort().map(d => ad(d.slice(8) + '/' + d.slice(5, 7))).join('، ')) + '</small>' : '') + '</span>' + (x.ind ? '<span style="text-align:center;font-weight:800;line-height:1.5"><span style="color:#555;font-size:13px">' + ad(x.pass + x.fail) + ' طالب/ة</span><br><span class="tc-ok">✅ ' + ad(x.pass) + ' ناجح</span><br><span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">❌ ' + ad(x.fail) + ' راسب</span></span>' : '<span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">' + (x.fail ? 'راسب' : 'ناجح') + '</span>') + '</div>';
+      const cardOf = x => '<div class="tc-c' + (x.fail ? ' bad' : '') + '"><span><b>' + esc(x.name) + '</b>' + (x.ind ? '<span style="display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;background:#efe6ff;color:#5b3a9a;margin-inline-start:4px;">🧍 فردي</span>' : '') + ' ' + kindBadge(x) + (x.subs.length && !x.ind ? '<br><small style="color:#777;font-weight:600">' + esc(x.subs.join('، ')) + '</small>' : '') + (x.sups.some(v => nrm(v) !== nrm(x.tn)) ? '<br><small style="color:#b02a2a;font-weight:700">⚠️ المكتوب في «اسم المحفظ/ة» وقت الاختبار: ' + esc(x.sups.join('، ')) + '</small>' : '') + (x.dates.length && !x.ind ? '<br><small style="color:#555;font-weight:700">🗓️ تاريخ الاختبار: ' + esc(x.dates.slice().sort().map(d => ad(d.slice(8) + '/' + d.slice(5, 7))).join('، ')) + '</small>' : '') + (x.ind ? indList(x) : '') + '</span>' + (x.ind ? '<span style="text-align:center;font-weight:800;line-height:1.5"><span style="color:#555;font-size:13px">' + ad(x.pass + x.fail) + ' طالب/ة</span><br><span class="tc-ok">✅ ' + ad(x.pass) + ' ناجح</span><br><span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">❌ ' + ad(x.fail) + ' راسب</span></span>' : '<span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">' + (x.fail ? 'راسب' : 'ناجح') + '</span>') + '</div>';
       box.innerHTML = TOPBTN('tcClose2') + '<h2>📅 الاختبارات بترتيب الشهور</h2><div class="tc-sub">كل شهر وفيه فصوله اللي اختبرت، تحت اسم محفظتها</div>' +
         (yms.length ? yms.map((ym, ix) => {
           const M = tcData(ym), ns = Object.keys(M.T).sort((a, b) => a.localeCompare(b, 'ar'));
@@ -1123,7 +1144,8 @@ $('bkBtn').addEventListener('click', () => {
   const pctOf = r => { const n = Number(r.grade); return isNaN(n) ? null : (isS(r) ? n * 10 : n); };
   /* نفس المحفظة بإملاء مختلف (أسماء/اسماء، مسافات، «أ.») = اسم واحد: بنختار الشكل الأكتر استخدامًا */
   let _cmRes = null, _cmMap = {};
-  const cleanT = n => String(n || '').replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '').trim().replace(/^\s*أ\s*[.\/]\s*/, '').replace(/\s+/g, ' ');
+  const cleanT = n => { const _r = cleanT0(n); return ({'هاحر':'هاجر'})[nrm(_r)] || _r; }; /* «هاحر» غلطة كتابة: بتتحسب عند «هاجر» */
+  const cleanT0 = n => String(n || '').replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '').trim().replace(/^\s*أ\s*[.\/]\s*/, '').replace(/\s+/g, ' ');
   function canonT(n){
     n = cleanT(n); if(!n) return '';
     if(_cmRes !== results){
