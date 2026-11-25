@@ -656,10 +656,10 @@ $('bkBtn').addEventListener('click', () => {
       const roster = [], abs = {}, po = {}, ex = {}, dr = {}, disp = {};
       ros.forEach(x => {
         (Array.isArray(x.students) ? x.students : []).forEach(n => { n = String(n || '').trim(); if(n && !roster.some(m => sameStu(nm2(m), nm2(n)))) roster.push(n); });
-        (Array.isArray(x.absences) ? x.absences : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const tg = a.t === 'x' ? ex : a.t === 'r' ? dr : a.t === 'p' ? po : abs, set = tg[k] || (tg[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(inR(String(d)) && set.indexOf(d) < 0) set.push(d); }); });
-        (Array.isArray(x.postponed) ? x.postponed : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const set = po[k] || (po[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(inR(String(d)) && set.indexOf(d) < 0) set.push(d); }); });
-        (Array.isArray(x.excused) ? x.excused : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const set = ex[k] || (ex[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(inR(String(d)) && set.indexOf(d) < 0) set.push(d); }); });
-        (Array.isArray(x.dropped) ? x.dropped : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const set = dr[k] || (dr[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(inR(String(d)) && set.indexOf(d) < 0) set.push(d); }); });
+        (Array.isArray(x.absences) ? x.absences : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const tg = a.t === 'x' ? ex : a.t === 'r' ? dr : a.t === 'p' ? po : abs, set = tg[k] || (tg[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if((tg !== abs || inR(String(d))) && set.indexOf(d) < 0) set.push(d); }); });
+        (Array.isArray(x.postponed) ? x.postponed : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const set = po[k] || (po[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(set.indexOf(d) < 0) set.push(d); /* حالة الطالب (تأجيل/عذر/منقطع) مش مربوطة بفترة التقرير */ }); });
+        (Array.isArray(x.excused) ? x.excused : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const set = ex[k] || (ex[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(set.indexOf(d) < 0) set.push(d); /* حالة الطالب (تأجيل/عذر/منقطع) مش مربوطة بفترة التقرير */ }); });
+        (Array.isArray(x.dropped) ? x.dropped : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const set = dr[k] || (dr[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(set.indexOf(d) < 0) set.push(d); /* حالة الطالب (تأجيل/عذر/منقطع) مش مربوطة بفترة التقرير */ }); });
       });
       const hasR = roster.length > 0;
       /* لو كشف طلاب الفصل لسه ماوصلش: بنعرض الطلاب المتعلّم عليهم (غياب/عذر/تأجيل/منقطع) من بياناتهم هما */
@@ -1528,6 +1528,8 @@ $('bkBtn').addEventListener('click', () => {
       var ab = Array.isArray(x.absences) ? x.absences : [], c = {a: 0, p: 0, x: 0, r: 0};
       ab.forEach(function(e){ var t = e && e.t; if(t === 'p') c.p++; else if(t === 'x') c.x++; else if(t === 'r') c.r++; else c.a++; });
       out += '• ' + kindOf(String(x.id || '')) + ' | ' + (x.className || '?') + ' | طلاب:' + (Array.isArray(x.students) ? x.students.length : 0) + ' | غياب:' + c.a + ' تأجيل:' + c.p + ' عذر:' + c.x + ' منقطع:' + c.r + ' | تأجيل-قديم:' + (Array.isArray(x.postponed) ? x.postponed.length : 0) + '\n';
+      var dt = []; (Array.isArray(x.postponed) ? x.postponed : []).forEach(function(e){ dt.push('تأجيل: ' + (e && e.n) + ' ' + ((e && e.d) || []).join('/')); }); ab.forEach(function(e){ if(e && e.t) dt.push(e.t + ': ' + e.n + ' ' + (e.d || []).join('/')); });
+      if(dt.length) out += '   ' + dt.join(' ؛ ') + '\n';
     });
     box.textContent = out;
   }
