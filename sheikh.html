@@ -656,10 +656,10 @@ $('bkBtn').addEventListener('click', () => {
     names.forEach(cn => {
       const ros = rosters.filter(x => clsKey(x.className) === clsKey(cn) && (!o.br || !x.branch || String(x.branch).trim() === o.br));
       if(!ros.length) return;
-      const roster = [], abs = {}, po = {}, ex = {}, dr = {}, mv = {}, disp = {}, allM = []; /* allM: كل علامات (غياب/تأجيل/عذر) بتواريخها من غير فلتر الفترة — لملاحظة «كان غايب» جنب اسم اللي اختبر بعدها */
+      const roster = [], abs = {}, nt = {}, po = {}, ex = {}, dr = {}, mv = {}, disp = {}, allM = []; /* allM: كل علامات (غياب/تأجيل/عذر) بتواريخها من غير فلتر الفترة — لملاحظة «كان غايب» جنب اسم اللي اختبر بعدها */
       ros.forEach(x => {
         (Array.isArray(x.students) ? x.students : []).forEach(n => { n = String(n || '').trim(); if(n && !roster.some(m => sameStu(nm2(m), nm2(n)))) roster.push(n); });
-        (Array.isArray(x.absences) ? x.absences : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const tg = a.t === 'x' ? ex : a.t === 'r' ? dr : a.t === 'm' ? mv : a.t === 'p' ? po : abs, set = tg[k] || (tg[k] = []); { const kd = a.t === 'x' ? 'x' : a.t === 'p' ? 'p' : (a.t === 'r' || a.t === 'm') ? '' : 'a'; if(kd) (Array.isArray(a.d) ? a.d : []).forEach(d => allM.push({k: k, d: String(d), t: kd})); } (Array.isArray(a.d) ? a.d : []).forEach(d => { if((tg !== abs || inR(String(d))) && set.indexOf(d) < 0) set.push(d); }); });
+        (Array.isArray(x.absences) ? x.absences : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const tg = a.t === 'n' ? nt : a.t === 'x' ? ex : a.t === 'r' ? dr : a.t === 'm' ? mv : a.t === 'p' ? po : abs, set = tg[k] || (tg[k] = []); { const kd = a.t === 'x' ? 'x' : a.t === 'p' ? 'p' : (a.t === 'r' || a.t === 'm' || a.t === 'n') ? '' : 'a'; if(kd) (Array.isArray(a.d) ? a.d : []).forEach(d => allM.push({k: k, d: String(d), t: kd})); } (Array.isArray(a.d) ? a.d : []).forEach(d => { if((tg !== abs || inR(String(d))) && set.indexOf(d) < 0) set.push(d); }); });
         (Array.isArray(x.postponed) ? x.postponed : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const set = po[k] || (po[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(set.indexOf(d) < 0) set.push(d); allM.push({k: k, d: String(d), t: 'p'}); /* حالة الطالب (تأجيل/عذر/منقطع) مش مربوطة بفترة التقرير */ }); });
         (Array.isArray(x.excused) ? x.excused : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const set = ex[k] || (ex[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(set.indexOf(d) < 0) set.push(d); allM.push({k: k, d: String(d), t: 'x'}); /* حالة الطالب (تأجيل/عذر/منقطع) مش مربوطة بفترة التقرير */ }); });
         (Array.isArray(x.dropped) ? x.dropped : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const set = dr[k] || (dr[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(set.indexOf(d) < 0) set.push(d); /* حالة الطالب (تأجيل/عذر/منقطع) مش مربوطة بفترة التقرير */ }); });
@@ -667,10 +667,11 @@ $('bkBtn').addEventListener('click', () => {
       const hasR = roster.length > 0;
       /* لو كشف طلاب الفصل لسه ماوصلش: بنعرض الطلاب المتعلّم عليهم (غياب/عذر/تأجيل/منقطع) من بياناتهم هما */
       /* أي طالب متعلّم عليه (غياب/عذر/تأجيل/منقطع) لازم يظهر حتى لو مش في كشف الفصل */
-      Object.keys(disp).forEach(k => { if(((abs[k] || []).length || (po[k] || []).length || (ex[k] || []).length || (dr[k] || []).length || (mv[k] || []).length) && !roster.some(m => sameStu(nm2(m), k))) roster.push(disp[k]); });
+      Object.keys(disp).forEach(k => { if(((abs[k] || []).length || (po[k] || []).length || (ex[k] || []).length || (dr[k] || []).length || (mv[k] || []).length || (nt[k] || []).length) && !roster.some(m => sameStu(nm2(m), k))) roster.push(disp[k]); });
       const poOf = k => { let r = []; Object.keys(po).forEach(a => { if(sameStu(k, a)) r = r.concat(po[a]); }); return r; };
       const exOf = k => { let r = []; Object.keys(ex).forEach(a => { if(sameStu(k, a)) r = r.concat(ex[a]); }); return r; };
       const drOf = k => { let r = []; Object.keys(dr).forEach(a => { if(sameStu(k, a)) r = r.concat(dr[a]); }); return r; };
+      const nOf = k => { let r = []; Object.keys(nt).forEach(a => { if(sameStu(k, a)) r = r.concat(nt[a]); }); return r; };
       const mvOf = k => { let r = []; Object.keys(mv).forEach(a => { if(sameStu(k, a)) r = r.concat(mv[a]); }); return r; };
       const daysOf = n => { const k = nm2(n), pd = poOf(k); let c = 0; Object.keys(abs).forEach(a => { if(sameStu(k, a)) c = Math.max(c, abs[a].filter(d => pd.indexOf(d) < 0).length); }); return c; };
       const tested = []; gs.filter(g => g.name === cn).forEach(g => g.rows.forEach(r => { const k = nm2(r.student); if(k && tested.indexOf(k) < 0) tested.push(k); }));
@@ -704,7 +705,8 @@ $('bkBtn').addEventListener('click', () => {
         else if(hit < 0 && drOf(k).length) dropped.push({name: n}); /* منقطع: مش غايب */
         else if(hit < 0 && mvOf(k).length) moved.push({name: n}); /* منقول: مش غايب */
         else if(hit < 0 && poOf(k).length) postponed.push({name: n, days: d}); /* حضر ومكنش حافظ فاتأجّل: مش غايب */
-        else if(hit < 0 && !d){ pending++; pendList.push({name: n}); return; } /* مفيش علامة غياب من المختبِرة: مش غايب (بس لسه مااختبرش) */
+        else if(hit < 0 && nOf(k).length && !d){ pending++; pendList.push({name: n}); return; } /* لم يختبر: متعلّم عليه بإيدك من برنامج الاختبارات */
+        else if(hit < 0 && !d){ pending++; return; } /* مش متعلّم عليه: مايظهرش في القايمة (بيتحسب بس عشان رسالة «مفيش غايبين» ماتظهرش غلط) */ /* مفيش علامة غياب من المختبِرة: مش غايب (بس لسه مااختبرش) */
         else if(hit < 0) absent.push({name: n, days: d, tested: false});
         /* اللي اختبر مش بيتحسب غايب خلاص، حتى لو كان غايب قبل كده */
       });
