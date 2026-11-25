@@ -636,53 +636,96 @@ $('bkBtn').addEventListener('click', () => {
     return [r.testType || '', r.hizb !== '' && r.hizb != null ? 'حزب ' + r.hizb : '', r.rub ? 'ربع ' + r.rub : ''].filter(Boolean).join(' — ');
   }
   /* ===== الغايبين: طلاب كشف الفصل (اللي بيبعته برنامج الاختبارات) اللي مااختبروش في التقرير ده ===== */
-  const nm2 = s => String(s == null ? '' : s).replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '').replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/[^\u0621-\u064A0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const nm2 = s => String(s == null ? '' : s).replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '').replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ؤ/g, 'و').replace(/ئ/g, 'ي').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/[^\u0621-\u064A0-9\s]/g, ' ').replace(/\s+/g, ' ').trim().replace(/(^|\s)عبد\s+(?=ال)/g, '$1عبد'); /* «عبد الله» = «عبدالله» */
   const lev1 = (x, y) => { if(x === y) return true; if(Math.abs(x.length - y.length) > 1) return false; let i = 0; while(i < x.length && i < y.length && x[i] === y[i]) i++; if(x.length === y.length) return x.slice(i + 1) === y.slice(i + 1); return x.length > y.length ? x.slice(i + 1) === y.slice(i) : y.slice(i + 1) === x.slice(i); };
-  const wEq = (x, y) => x === y || (x.length >= 5 && y.length >= 5 && lev1(x, y));
-  const sameStu = (a, b) => { if(a === b) return true; const A = a.split(' '), B = b.split(' '), sh = A.length <= B.length ? A : B, lg = A.length <= B.length ? B : A; if(sh.length < 3) return false; for(let i = 0; i < sh.length; i++){ if(!wEq(sh[i], lg[i])) return false; } return true; };
+  const wEq = (x, y, i, last) => x === y || (x.length >= 5 && y.length >= 5 && lev1(x, y)) || (i > 0 && x.length >= 3 && y.length >= 3 && lev1(x, y)) /* غلطة حرف في اسم الأب/الجد */ || (last && Math.min(x.length, y.length) >= 4 && (x.startsWith(y) || y.startsWith(x))) /* آخر كلمة مقطوعة */;
+  const sameStu = (a, b) => { if(a === b) return true; const A = a.split(' '), B = b.split(' '), sh = A.length <= B.length ? A : B, lg = A.length <= B.length ? B : A; if(sh.length < 3) return false; for(let i = 0; i < sh.length; i++){ if(!wEq(sh[i], lg[i], i, i === sh.length - 1)) return false; } return true; };
   const clsKey = c => nrm(c).replace(/^فصل\s+/, '');
   const dayW = n => n === 1 ? 'يوم واحد' : n === 2 ? 'يومين' : (n >= 3 && n <= 10) ? ad(n) + ' أيام' : ad(n) + ' يوم';
+  /* ملاحظة تحت/جنب اسم اللي اختبر بعد ما كان غايب/مؤجل/بعذر */
+  const noteTxt = m => !m ? '' : (m.t === 'x' ? '📝 كان بعذر' : m.t === 'p' ? '⏳ كان مؤجل' : '⚠️ كان غايب في حصته') + ' (' + ad(m.d.slice(8) + '/' + m.d.slice(5, 7)) + ')';
+  const noteClr = m => m && m.t === 'x' ? '#1d4a73' : m && m.t === 'p' ? '#8A6A20' : '#8A1F1F';
   /* عذر / منقطع: بيجوا من برنامج الاختبارات ويظهروا جنب الغايبين والمؤجلين */
   const exNames = list => list.map((x, k) => ad(k + 1) + '. ' + esc(x.name)).join(' &nbsp;•&nbsp; ');
-  const extraHead = ab => ab ? (ab.excused.length ? ' — عذر: ' + ad(ab.excused.length) : '') + (ab.dropped.length ? ' — منقطع: ' + ad(ab.dropped.length) : '') : '';
-  const extraHtml = ab => (ab.excused.length ? '<div class="cr-abs" style="border-color:#2E5E8C;background:#eef5fb;color:#1d4a73"><b>📝 بعذر (' + ad(ab.excused.length) + '):</b> ' + exNames(ab.excused) + '</div>' : '') + (ab.dropped.length ? '<div class="cr-abs" style="border-color:#666;background:#f1f1f1;color:#444"><b>🚫 منقطع (' + ad(ab.dropped.length) + '):</b> ' + exNames(ab.dropped) + '</div>' : '');
-  const extraT = ab => ab ? (ab.excused.length ? '*📝 بعذر (' + ad(ab.excused.length) + '):* ' + ab.excused.map(x => x.name).join('، ') + '\n' : '') + (ab.dropped.length ? '*🚫 منقطع (' + ad(ab.dropped.length) + '):* ' + ab.dropped.map(x => x.name).join('، ') + '\n' : '') : '';
+  const extraHead = ab => ab ? (ab.excused.length ? ' — عذر: ' + ad(ab.excused.length) : '') + (ab.dropped.length ? ' — منقطع: ' + ad(ab.dropped.length) : '') + (ab.moved.length ? ' — منقول: ' + ad(ab.moved.length) : '') : '';
+  const extraHtml = ab => (ab.excused.length ? '<div class="cr-abs" style="border-color:#2E5E8C;background:#eef5fb;color:#1d4a73"><b>📝 بعذر (' + ad(ab.excused.length) + '):</b> ' + exNames(ab.excused) + '</div>' : '') + (ab.dropped.length ? '<div class="cr-abs" style="border-color:#666;background:#f1f1f1;color:#444"><b>🚫 منقطع (' + ad(ab.dropped.length) + '):</b> ' + exNames(ab.dropped) + '</div>' : '') + (ab.moved.length ? '<div class="cr-abs" style="border-color:#6B4E9B;background:#f4effa;color:#4b3470"><b>🔄 منقول (' + ad(ab.moved.length) + '):</b> ' + exNames(ab.moved) + '</div>' : '');
+  const extraT = ab => ab ? (ab.excused.length ? '*📝 بعذر (' + ad(ab.excused.length) + '):* ' + ab.excused.map(x => x.name).join('، ') + '\n' : '') + (ab.dropped.length ? '*🚫 منقطع (' + ad(ab.dropped.length) + '):* ' + ab.dropped.map(x => x.name).join('، ') + '\n' : '') + (ab.moved.length ? '*🔄 منقول (' + ad(ab.moved.length) + '):* ' + ab.moved.map(x => x.name).join('، ') + '\n' : '') : '';
   function absentMap(gs, o){
     const out = {}, names = [...new Set(gs.map(g => g.name))];
     const inR = d => (!o.from || d >= o.from) && (!o.to || d <= o.to);
     names.forEach(cn => {
       const ros = rosters.filter(x => clsKey(x.className) === clsKey(cn) && (!o.br || !x.branch || String(x.branch).trim() === o.br));
       if(!ros.length) return;
-      const roster = [], abs = {}, po = {}, ex = {}, dr = {}, disp = {};
+      const roster = [], abs = {}, po = {}, ex = {}, dr = {}, mv = {}, disp = {}, allM = []; /* allM: كل علامات (غياب/تأجيل/عذر) بتواريخها من غير فلتر الفترة — لملاحظة «كان غايب» جنب اسم اللي اختبر بعدها */
       ros.forEach(x => {
         (Array.isArray(x.students) ? x.students : []).forEach(n => { n = String(n || '').trim(); if(n && !roster.some(m => sameStu(nm2(m), nm2(n)))) roster.push(n); });
-        (Array.isArray(x.absences) ? x.absences : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const tg = a.t === 'x' ? ex : a.t === 'r' ? dr : a.t === 'p' ? po : abs, set = tg[k] || (tg[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if((tg !== abs || inR(String(d))) && set.indexOf(d) < 0) set.push(d); }); });
-        (Array.isArray(x.postponed) ? x.postponed : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const set = po[k] || (po[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(set.indexOf(d) < 0) set.push(d); /* حالة الطالب (تأجيل/عذر/منقطع) مش مربوطة بفترة التقرير */ }); });
-        (Array.isArray(x.excused) ? x.excused : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const set = ex[k] || (ex[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(set.indexOf(d) < 0) set.push(d); /* حالة الطالب (تأجيل/عذر/منقطع) مش مربوطة بفترة التقرير */ }); });
+        (Array.isArray(x.absences) ? x.absences : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const tg = a.t === 'x' ? ex : a.t === 'r' ? dr : a.t === 'm' ? mv : a.t === 'p' ? po : abs, set = tg[k] || (tg[k] = []); { const kd = a.t === 'x' ? 'x' : a.t === 'p' ? 'p' : (a.t === 'r' || a.t === 'm') ? '' : 'a'; if(kd) (Array.isArray(a.d) ? a.d : []).forEach(d => allM.push({k: k, d: String(d), t: kd})); } (Array.isArray(a.d) ? a.d : []).forEach(d => { if((tg !== abs || inR(String(d))) && set.indexOf(d) < 0) set.push(d); }); });
+        (Array.isArray(x.postponed) ? x.postponed : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const set = po[k] || (po[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(set.indexOf(d) < 0) set.push(d); allM.push({k: k, d: String(d), t: 'p'}); /* حالة الطالب (تأجيل/عذر/منقطع) مش مربوطة بفترة التقرير */ }); });
+        (Array.isArray(x.excused) ? x.excused : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const set = ex[k] || (ex[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(set.indexOf(d) < 0) set.push(d); allM.push({k: k, d: String(d), t: 'x'}); /* حالة الطالب (تأجيل/عذر/منقطع) مش مربوطة بفترة التقرير */ }); });
         (Array.isArray(x.dropped) ? x.dropped : []).forEach(a => { const k = nm2(a && a.n); if(!k) return; if(!disp[k]) disp[k] = String(a.n).trim(); const set = dr[k] || (dr[k] = []); (Array.isArray(a.d) ? a.d : []).forEach(d => { if(set.indexOf(d) < 0) set.push(d); /* حالة الطالب (تأجيل/عذر/منقطع) مش مربوطة بفترة التقرير */ }); });
       });
       const hasR = roster.length > 0;
       /* لو كشف طلاب الفصل لسه ماوصلش: بنعرض الطلاب المتعلّم عليهم (غياب/عذر/تأجيل/منقطع) من بياناتهم هما */
       /* أي طالب متعلّم عليه (غياب/عذر/تأجيل/منقطع) لازم يظهر حتى لو مش في كشف الفصل */
-      Object.keys(disp).forEach(k => { if(((abs[k] || []).length || (po[k] || []).length || (ex[k] || []).length || (dr[k] || []).length) && !roster.some(m => sameStu(nm2(m), k))) roster.push(disp[k]); });
+      Object.keys(disp).forEach(k => { if(((abs[k] || []).length || (po[k] || []).length || (ex[k] || []).length || (dr[k] || []).length || (mv[k] || []).length) && !roster.some(m => sameStu(nm2(m), k))) roster.push(disp[k]); });
       const poOf = k => { let r = []; Object.keys(po).forEach(a => { if(sameStu(k, a)) r = r.concat(po[a]); }); return r; };
       const exOf = k => { let r = []; Object.keys(ex).forEach(a => { if(sameStu(k, a)) r = r.concat(ex[a]); }); return r; };
       const drOf = k => { let r = []; Object.keys(dr).forEach(a => { if(sameStu(k, a)) r = r.concat(dr[a]); }); return r; };
+      const mvOf = k => { let r = []; Object.keys(mv).forEach(a => { if(sameStu(k, a)) r = r.concat(mv[a]); }); return r; };
       const daysOf = n => { const k = nm2(n), pd = poOf(k); let c = 0; Object.keys(abs).forEach(a => { if(sameStu(k, a)) c = Math.max(c, abs[a].filter(d => pd.indexOf(d) < 0).length); }); return c; };
       const tested = []; gs.filter(g => g.name === cn).forEach(g => g.rows.forEach(r => { const k = nm2(r.student); if(k && tested.indexOf(k) < 0) tested.push(k); }));
-      const used = {}, absent = [], postponed = [], excused = [], dropped = [];
+      /* 🔁 لو الفصل اختبر في حصة فاتت وفضل ناس مااختبروش: اللي اختبر في نفس الدورة مش غايب (حتى لو التقرير ليوم واحد) */
+      const cycNames = (() => {
+        try{
+          const key = clsKey(cn), end = o.to || '9999-99-99';
+          const rowsC = results.filter(valid).filter(r => clsKey(r.className) === key && dOf(r) <= end);
+          if(!rowsC.length || !roster.length) return [];
+          const dates = [...new Set(rowsC.map(dOf))].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+          const gap = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
+          let cyc = [], last = '';
+          dates.forEach(d => {
+            if(last && gap(last, d) > 14) cyc = [];
+            rowsC.filter(r => dOf(r) === d).forEach(r => { const k = nm2(r.student); if(k && !cyc.some(c => sameStu(c, k))) cyc.push(k); });
+            if(roster.every(m => { const k = nm2(m); return cyc.some(c => sameStu(c, k)) || drOf(k).length || mvOf(k).length; })) cyc = [];
+            last = d;
+          });
+          return cyc;
+        }catch(e){ return []; }
+      })();
+      let pending = 0; const pendList = []; /* لسه مااختبروش ومتعلّمش عليهم */
+      const used = {}, absent = [], postponed = [], excused = [], dropped = [], moved = [];
       roster.forEach(n => {
         const k = nm2(n); let hit = -1;
         for(let i = 0; i < tested.length; i++){ if(!used[i] && sameStu(k, tested[i])){ hit = i; break; } }
         if(hit >= 0) used[hit] = 1;
+        if(hit < 0 && cycNames.some(c => sameStu(k, c))) return; /* اختبر قبل كده في نفس الدورة */
         const d = daysOf(n);
         if(hit < 0 && exOf(k).length) excused.push({name: n}); /* عذر: مش غايب */
         else if(hit < 0 && drOf(k).length) dropped.push({name: n}); /* منقطع: مش غايب */
+        else if(hit < 0 && mvOf(k).length) moved.push({name: n}); /* منقول: مش غايب */
         else if(hit < 0 && poOf(k).length) postponed.push({name: n, days: d}); /* حضر ومكنش حافظ فاتأجّل: مش غايب */
+        else if(hit < 0 && !d){ pending++; pendList.push({name: n}); return; } /* مفيش علامة غياب من المختبِرة: مش غايب (بس لسه مااختبرش) */
         else if(hit < 0) absent.push({name: n, days: d, tested: false});
-        else if(d) absent.push({name: n, days: d, tested: true}); /* غاب في الفترة دي حتى لو اختبر بعدها */
+        /* اللي اختبر مش بيتحسب غايب خلاص، حتى لو كان غايب قبل كده */
       });
-      out[cn] = {absent, postponed, excused, dropped, total: hasR ? roster.length : 0, daysOf};
+      /* 📌 ملاحظة للطالب اللي اتأخر واختبر بعدها: آخر غياب/تأجيل/عذر قبل تاريخ اختباره (من غير ما يكون اختبر بينهم)، وفي حدود أسبوعين */
+      const gapD = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
+      const myTests = n => { const k = nm2(n), key = clsKey(cn); return results.filter(valid).filter(r => clsKey(r.className) === key && sameStu(nm2(r.student), k)).map(dOf).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)); };
+      const noteOf = (n, testD) => {
+        try{
+          if(!/^\d{4}-\d{2}-\d{2}$/.test(testD || '')) return null;
+          const k = nm2(n), tt = myTests(n);
+          let best = null;
+          allM.forEach(m => {
+            if(!/^\d{4}-\d{2}-\d{2}$/.test(m.d) || m.d >= testD || !sameStu(k, m.k)) return;
+            if(gapD(m.d, testD) > 14) return;
+            if(tt.some(t => t >= m.d && t < testD)) return; /* اختبر بعد الغياب ده بالفعل: الملاحظة تخص اختبار تاني */
+            if(!best || m.d > best.d || (m.d === best.d && m.t === 'x')) best = m;
+          });
+          return best;
+        }catch(e){ return null; }
+      };
+      out[cn] = {absent, postponed, excused, dropped, moved, pending, pendList, total: hasR ? roster.length : 0, daysOf, noteOf};
     });
     return out;
   }
@@ -708,7 +751,7 @@ $('bkBtn').addEventListener('click', () => {
         const label = p ? (fem(r) ? 'ناجحة' : 'ناجح') : (fem(r) ? 'راسبة' : 'راسب');
         const gr = isNaN(n) ? esc(r.grade) : ad(isS(r) ? 10 : 100) + '/' + ad(n);
         const ms = (r.mistakes === '' || r.mistakes == null) ? '-' : ad(r.mistakes);
-        return '<tr><td style="width:44px">' + ad(i + 1) + '</td><td class="nm">' + esc(r.student) + (function(){ const dd = ab0 && ab0.daysOf ? ab0.daysOf(r.student) : 0; return dd ? '<div style="font-size:12px;font-weight:700;color:#8A1F1F;white-space:normal">غاب: ' + dayW(dd) + '</div>' : ''; })() + '</td><td>' + ms + '</td><td>' + gr + '</td><td class="' + (p ? 'cr-ok' : 'cr-no') + '">' + label + '</td></tr>';
+        return '<tr><td style="width:44px">' + ad(i + 1) + '</td><td class="nm">' + esc(r.student) + (function(){ const m = ab0 && ab0.noteOf ? ab0.noteOf(r.student, dOf(r)) : null; return m ? '<div style="font-size:13px;font-weight:700;color:' + noteClr(m) + ';white-space:normal">' + noteTxt(m) + '</div>' : ''; })() + '</td><td>' + ms + '</td><td>' + gr + '</td><td class="' + (p ? 'cr-ok' : 'cr-no') + '">' + label + '</td></tr>';
       }).join('');
       const sv = [], sj = [], ss = [];
       g.rows.forEach(r => { const v = String(r.supervisorName || '').trim(); if(v && sv.indexOf(v) < 0) sv.push(v); if(!isS(r)){ const t = subject(r); if(t && sj.indexOf(t) < 0) sj.push(t); } else { (Array.isArray(r.questions) ? r.questions : []).forEach(q => { if(q && q.surah && ss.indexOf(q.surah) < 0) ss.push(q.surah); }); } });
@@ -717,9 +760,9 @@ $('bkBtn').addEventListener('click', () => {
         ' <span style="color:#8A6A20">— المحفظ/ة: ' + (sv.length ? esc(sv.join('، ').replace(/^\s*أ\s*[.\/]\s*/, '')) : 'غير محددة') + '</span>' +
         (sj.length ? ' <span style="color:#1d4f8a">— ' + esc(sj.join('، ')) + '</span>' : '') +
         (ss.length ? ' <span style="color:#1d4f8a">— السورة: ' + esc(ss.join('، ')) + '</span>' : '') +
-        ' <small>(' + (ab0 && ab0.total ? 'عدد طلاب الفصل: ' + ad(ab0.total) + ' — اختبر: ' + ad(new Set(g.rows.map(r => nm2(r.student))).size) : 'عدد الطلاب: ' + ad(g.rows.length)) + ' — ناجح: ' + ad(pass) + ' — راسب: ' + ad(fail) + (ab ? ' — <span style="color:#8A1F1F">غايب: ' + ad(ab.absent.length) + '</span>' : '') + (ab && ab.postponed.length ? ' — <span style="color:#8A6A20">مؤجل: ' + ad(ab.postponed.length) + '</span>' : '') + extraHead(ab) + ')</small></h3>' +
+        ' <small>(' + (ab0 && ab0.total ? 'عدد طلاب الفصل: ' + ad(ab0.total) + ' — اختبر: ' + ad(new Set(g.rows.map(r => nm2(r.student))).size) : 'عدد الطلاب: ' + ad(g.rows.length)) + ' — ناجح: ' + ad(pass) + ' — راسب: ' + ad(fail) + (ab && ab.absent.length ? ' — <span style="color:#8A1F1F">غايب: ' + ad(ab.absent.length) + '</span>' : '') + (ab && ab.postponed.length ? ' — <span style="color:#8A6A20">مؤجل: ' + ad(ab.postponed.length) + '</span>' : '') + extraHead(ab) + ')</small></h3>' +
         '<table><thead><tr><th>م</th><th>الإسم</th><th>عدد الأخطاء</th><th>الدرجة</th><th>النتيجة</th></tr></thead><tbody>' + rows + '</tbody></table>' +
-        (ab ? (ab.absent.length ? '<div class="cr-abs"><b>الغايبين (' + ad(ab.absent.length) + '):</b> ' + ab.absent.map((x, k) => ad(k + 1) + '. ' + esc(x.name) + (x.days ? ' <small>(غاب: ' + dayW(x.days) + (x.tested ? ' — واختبر بعدها' : '') + ')</small>' : '')).join(' &nbsp;•&nbsp; ') + '</div>' : (ab.postponed.length || ab.excused.length || ab.dropped.length || !ab.total ? '' : '<div class="cr-abs ok">✅ مفيش غايبين (كل طلاب الفصل اختبروا)</div>')) + (ab.postponed.length ? '<div class="cr-abs" style="border-color:#8A6A20;background:#fff8e6;color:#7a5a10"><b>⏳ المؤجلين (' + ad(ab.postponed.length) + ') — حضروا ومكنوش حافظين:</b> ' + ab.postponed.map((x, k) => ad(k + 1) + '. ' + esc(x.name) + (x.days ? ' <small>(غاب قبل كده: ' + dayW(x.days) + ')</small>' : '')).join(' &nbsp;•&nbsp; ') + '</div>' : '') + extraHtml(ab) : '') + '</div>';
+        (ab ? (ab.absent.length ? '<div class="cr-abs"><b>الغايبين (' + ad(ab.absent.length) + '):</b> ' + ab.absent.map((x, k) => ad(k + 1) + '. ' + esc(x.name) + (x.days ? ' <small>(غاب: ' + dayW(x.days) + (x.tested ? ' — واختبر بعدها' : '') + ')</small>' : '')).join(' &nbsp;•&nbsp; ') + '</div>' : (ab.postponed.length || ab.excused.length || ab.dropped.length || ab.moved.length || !ab.total || ab.pending ? '' : '<div class="cr-abs ok">✅ مفيش غايبين (كل طلاب الفصل اختبروا)</div>')) + (ab.postponed.length ? '<div class="cr-abs" style="border-color:#8A6A20;background:#fff8e6;color:#7a5a10"><b>⏳ المؤجلين (' + ad(ab.postponed.length) + ') — حضروا ومكنوش حافظين:</b> ' + ab.postponed.map((x, k) => ad(k + 1) + '. ' + esc(x.name) + (x.days ? ' <small>(غاب قبل كده: ' + dayW(x.days) + ')</small>' : '')).join(' &nbsp;•&nbsp; ') + '</div>' : '') + extraHtml(ab) + (ab.pendList && ab.pendList.length ? '<div class="cr-abs" style="border-color:#888;background:#f6f6f6;color:#444"><b>🕓 لم يختبر بعد (' + ad(ab.pendList.length) + '):</b> ' + exNames(ab.pendList) + '</div>' : '') : '') + '</div>';
     });
     return h;
   }
@@ -754,11 +797,12 @@ $('bkBtn').addEventListener('click', () => {
     gs.forEach(g => {
       let ok = 0; g.rows.forEach(r => { if(passOf(r)) ok++; });
       const ab = (AB[g.name] && !abShown[g.name]) ? (abShown[g.name] = AB[g.name]) : null;
-      t += '\n*الفصل: ' + g.name + (indOfClass(g.name) ? ' — فردي' : '') + (kinds[g.name].size > 1 ? (kindOf(g.rows[0]) === 's' ? ' — اختبار على سورة' : ' — اختبار على جزء') : '') + '* (ناجح ' + ad(ok) + ' — راسب ' + ad(g.rows.length - ok) + (ab ? ' — غايب ' + ad(ab.absent.length) : '') + (ab && ab.postponed.length ? ' — مؤجل ' + ad(ab.postponed.length) : '') + (ab ? (ab.excused.length ? ' — عذر ' + ad(ab.excused.length) : '') + (ab.dropped.length ? ' — منقطع ' + ad(ab.dropped.length) : '') : '') + ')\n';
-      g.rows.forEach((r, i) => { const n = Number(r.grade); t += ad(i + 1) + '. ' + r.student + ' — ' + (isNaN(n) ? r.grade : ad(isS(r) ? 10 : 100) + '/' + ad(n)) + ' — ' + (passOf(r) ? (fem(r) ? 'ناجحة' : 'ناجح') : (fem(r) ? 'راسبة' : 'راسب')) + '\n'; });
+      t += '\n*الفصل: ' + g.name + (indOfClass(g.name) ? ' — فردي' : '') + (kinds[g.name].size > 1 ? (kindOf(g.rows[0]) === 's' ? ' — اختبار على سورة' : ' — اختبار على جزء') : '') + '* (ناجح ' + ad(ok) + ' — راسب ' + ad(g.rows.length - ok) + (ab && ab.absent.length ? ' — غايب ' + ad(ab.absent.length) : '') + (ab && ab.postponed.length ? ' — مؤجل ' + ad(ab.postponed.length) : '') + (ab ? (ab.excused.length ? ' — عذر ' + ad(ab.excused.length) : '') + (ab.dropped.length ? ' — منقطع ' + ad(ab.dropped.length) : '') + (ab.moved.length ? ' — منقول ' + ad(ab.moved.length) : '') : '') + ')\n';
+      g.rows.forEach((r, i) => { const n = Number(r.grade); t += ad(i + 1) + '. ' + r.student + (function(){ const m = AB[g.name] && AB[g.name].noteOf ? AB[g.name].noteOf(r.student, dOf(r)) : null; return m ? ' (' + noteTxt(m) + ')' : ''; })() + ' — ' + (isNaN(n) ? r.grade : ad(isS(r) ? 10 : 100) + '/' + ad(n)) + ' — ' + (passOf(r) ? (fem(r) ? 'ناجحة' : 'ناجح') : (fem(r) ? 'راسبة' : 'راسب')) + '\n'; });
       if(ab && ab.absent.length) t += '*الغايبين (' + ad(ab.absent.length) + '):* ' + ab.absent.map(x => x.name + (x.days ? ' (غاب ' + dayW(x.days) + ')' : '')).join('، ') + '\n';
       if(ab && ab.postponed.length) t += '*⏳ المؤجلين (' + ad(ab.postponed.length) + ') — حضروا ومكنوش حافظين:* ' + ab.postponed.map(x => x.name).join('، ') + '\n';
       t += extraT(ab);
+      if(ab && ab.pendList && ab.pendList.length) t += '*🕓 لم يختبر بعد (' + ad(ab.pendList.length) + '):* ' + ab.pendList.map(x => x.name).join('، ') + '\n';
     });
     return t;
   }
@@ -1195,7 +1239,10 @@ $('bkBtn').addEventListener('click', () => {
     '@media print{html.tr-open body>*:not(#trOv){display:none!important}html.tr-open body>#trOv{display:block!important}#trOv{position:static!important;background:#fff!important;padding:0!important;overflow:visible!important}#trOv .tr-noprint{display:none!important}}';
   document.head.appendChild(trCss);
 
-  const TR = {tab: 'atq', from: '', to: '', br: '', mon: '', cls: '', stu: '', text: ''};
+  const TR = {tab: 'atq', from: '', to: '', br: '', mon: '', cls: '', stu: '', text: '', q: ''};
+  /* 🔎 بحث باسم الفصل في كل التقارير (بيتجاهل اختلاف الهمزات والتشكيل) */
+  const trQn = s => String(s == null ? '' : s).replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
+  const trCls = r => !TR.q || trQn(String(r.className || '').trim() || 'بدون فصل').indexOf(trQn(TR.q)) >= 0;
   const AR_ = (a, b) => String(a).localeCompare(String(b), 'ar');
   const pctOf = r => { const n = Number(r.grade); return isNaN(n) ? null : (isS(r) ? n * 10 : n); };
   /* نفس المحفظة بإملاء مختلف (أسماء/اسماء، مسافات، «أ.») = اسم واحد: بنختار الشكل الأكتر استخدامًا */
@@ -1243,7 +1290,7 @@ $('bkBtn').addEventListener('click', () => {
   const HEADT = (title, sub) => ['✦ مركز الأمين الثقافي التربوي ✦', title, sub, ''];
 
   function trRange(){
-    return results.filter(valid).filter(r => { const d = dOf(r); return (!TR.from || d >= TR.from) && (!TR.to || d <= TR.to) && (!TR.br || brOf(r) === TR.br); });
+    return results.filter(valid).filter(r => { const d = dOf(r); return (!TR.from || d >= TR.from) && (!TR.to || d <= TR.to) && (!TR.br || brOf(r) === TR.br) && trCls(r); });
   }
   function trPer(){ return TR.from === TR.to ? dLbl(TR.from) : 'من ' + dLbl(TR.from) + ' إلى ' + dLbl(TR.to); }
   function trGroup(rows){
@@ -1319,7 +1366,7 @@ $('bkBtn').addEventListener('click', () => {
 
   /* 🗓️ تقرير شهري */
   function trMon(){
-    const all = results.filter(valid).filter(r => !TR.br || brOf(r) === TR.br);
+    const all = results.filter(valid).filter(r => !TR.br || brOf(r) === TR.br).filter(trCls);
     const ms = trMonths();
     if(!TR.mon || ms.indexOf(TR.mon) < 0) TR.mon = ms[0] || '';
     if(!TR.mon) return {h: hero('🗓️ التقرير الشهري', '') + '<div class="tr-mut">مفيش اختبارات لسه.</div>', t: ''};
@@ -1470,13 +1517,14 @@ $('bkBtn').addEventListener('click', () => {
       const brs = [...new Set(results.filter(valid).map(brOf).filter(Boolean))].sort(AR_);
       if(TR.br && brs.indexOf(TR.br) < 0) TR.br = '';
       const brSel = brs.length ? '<label>الفرع' + sel('trBr', brs, TR.br, 'كل الفروع') + '</label>' : '';
+      const qSel = '<label>🔎 بحث باسم الفصل<input type="search" id="trQ" placeholder="اكتبي اسم الفصل" value="' + esc(TR.q) + '" autocomplete="off"></label>';
       let ctl = '', out;
       if(TR.tab === 'atq' || TR.tab === 'ats' || TR.tab === 'wsum' || TR.tab === 'week'){
-        ctl = '<label>من<input type="date" id="trF" value="' + TR.from + '"></label><label>إلى<input type="date" id="trT" value="' + TR.to + '"></label><button type="button" class="tr-b" data-q="6">آخر ٧ أيام</button><button type="button" class="tr-b" data-q="13">آخر ١٤ يوم</button><button type="button" class="tr-b" data-q="m">الشهر ده</button>' + brSel;
+        ctl = '<label>من<input type="date" id="trF" value="' + TR.from + '"></label><label>إلى<input type="date" id="trT" value="' + TR.to + '"></label><button type="button" class="tr-b" data-q="6">آخر ٧ أيام</button><button type="button" class="tr-b" data-q="13">آخر ١٤ يوم</button><button type="button" class="tr-b" data-q="m">الشهر ده</button>' + brSel + qSel;
         out = TR.tab === 'atq' ? trAft(false) : TR.tab === 'ats' ? trAft(true) : TR.tab === 'wsum' ? trWsum() : trWeek();
       }else if(TR.tab === 'mon'){
         out = trMon();
-        ctl = '<label>الشهر' + sel('trM', trMonths().map(m => [m, mLbl(m)]), TR.mon, null) + '</label>' + brSel;
+        ctl = '<label>الشهر' + sel('trM', trMonths().map(m => [m, mLbl(m)]), TR.mon, null) + '</label>' + brSel + qSel;
       }else{
         out = trStu(); const L = trStuLists();
         ctl = brSel + '<label>الفصل' + sel('trC', L.cls, TR.cls, 'كل الفصول') + '</label><label>الطالب' + sel('trS', L.names, TR.stu, null) + '</label>';
@@ -1486,6 +1534,8 @@ $('bkBtn').addEventListener('click', () => {
       q('.tr-tabs').querySelectorAll('button').forEach(b => { b.onclick = () => { TR.tab = b.dataset.t; draw(); }; });
       const on = (id, fn) => { const e = q('#' + id); if(e) e.onchange = fn; };
       on('trBr', e => { TR.br = e.target.value; TR.cls = ''; TR.stu = ''; draw(); });
+      const qe = q('#trQ');
+      if(qe){ let qt = null; qe.oninput = () => { const v = qe.value; TR.q = v; clearTimeout(qt); qt = setTimeout(() => { draw(); const n = q('#trQ'); if(n){ n.focus(); try{ n.setSelectionRange(v.length, v.length); }catch(e){} } }, 350); }; }
       on('trF', e => { TR.from = e.target.value; if(!TR.to || TR.to < TR.from) TR.to = TR.from; draw(); });
       on('trT', e => { TR.to = e.target.value; if(TR.from > TR.to) TR.from = TR.to; draw(); });
       on('trM', e => { TR.mon = e.target.value; draw(); });
