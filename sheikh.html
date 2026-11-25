@@ -663,7 +663,8 @@ $('bkBtn').addEventListener('click', () => {
       });
       const hasR = roster.length > 0;
       /* لو كشف طلاب الفصل لسه ماوصلش: بنعرض الطلاب المتعلّم عليهم (غياب/عذر/تأجيل/منقطع) من بياناتهم هما */
-      if(!hasR) Object.keys(disp).forEach(k => { if((abs[k] || []).length || (po[k] || []).length || (ex[k] || []).length || (dr[k] || []).length) roster.push(disp[k]); });
+      /* أي طالب متعلّم عليه (غياب/عذر/تأجيل/منقطع) لازم يظهر حتى لو مش في كشف الفصل */
+      Object.keys(disp).forEach(k => { if(((abs[k] || []).length || (po[k] || []).length || (ex[k] || []).length || (dr[k] || []).length) && !roster.some(m => sameStu(nm2(m), k))) roster.push(disp[k]); });
       const poOf = k => { let r = []; Object.keys(po).forEach(a => { if(sameStu(k, a)) r = r.concat(po[a]); }); return r; };
       const exOf = k => { let r = []; Object.keys(ex).forEach(a => { if(sameStu(k, a)) r = r.concat(ex[a]); }); return r; };
       const drOf = k => { let r = []; Object.keys(dr).forEach(a => { if(sameStu(k, a)) r = r.concat(dr[a]); }); return r; };
@@ -1511,29 +1512,6 @@ $('bkBtn').addEventListener('click', () => {
   $('trBtn').addEventListener('click', openReports);
   window.openClassReport = openReport;
   $('crBtn').addEventListener('click', openReport);
-})();
-</script>
-<script>
-/* تشخيص (بيظهر بس لو فتحتي الصفحة بـ ?debug=1): بيعرض المستندات اللي وصلت للصفحة من البرنامج */
-(function(){
-  if(!/[?&]debug=1/.test(location.search)) return;
-  var box = document.createElement('div');
-  box.style.cssText = 'position:fixed;left:6px;right:6px;bottom:6px;max-height:42vh;overflow:auto;z-index:2147483000;background:#fff;color:#111;border:2px solid #C7963E;border-radius:10px;padding:8px;font:12px/1.6 sans-serif;direction:rtl;white-space:pre-wrap';
-  document.body.appendChild(box);
-  function kindOf(id){ return /_sk_st_/.test(id) ? 'حالات(st)' : /_sk_po_/.test(id) ? 'تأجيل-قديم(po)' : /_sk_ro_/.test(id) ? 'كشف(ro)' : 'غير معروف'; }
-  function upd(){
-    var rs = (typeof rosters !== 'undefined' && Array.isArray(rosters)) ? rosters : [];
-    var out = 'تشخيص — مستندات الكشف اللي وصلت: ' + rs.length + '\n';
-    rs.forEach(function(x){
-      var ab = Array.isArray(x.absences) ? x.absences : [], c = {a: 0, p: 0, x: 0, r: 0};
-      ab.forEach(function(e){ var t = e && e.t; if(t === 'p') c.p++; else if(t === 'x') c.x++; else if(t === 'r') c.r++; else c.a++; });
-      out += '• ' + kindOf(String(x.id || '')) + ' | ' + (x.className || '?') + ' | طلاب:' + (Array.isArray(x.students) ? x.students.length : 0) + ' | غياب:' + c.a + ' تأجيل:' + c.p + ' عذر:' + c.x + ' منقطع:' + c.r + ' | تأجيل-قديم:' + (Array.isArray(x.postponed) ? x.postponed.length : 0) + '\n';
-      var dt = []; (Array.isArray(x.postponed) ? x.postponed : []).forEach(function(e){ dt.push('تأجيل: ' + (e && e.n) + ' ' + ((e && e.d) || []).join('/')); }); ab.forEach(function(e){ if(e && e.t) dt.push(e.t + ': ' + e.n + ' ' + (e.d || []).join('/')); });
-      if(dt.length) out += '   ' + dt.join(' ؛ ') + '\n';
-    });
-    box.textContent = out;
-  }
-  upd(); setInterval(upd, 2000);
 })();
 </script>
 </body>
