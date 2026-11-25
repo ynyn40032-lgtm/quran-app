@@ -643,7 +643,7 @@ $('bkBtn').addEventListener('click', () => {
   const clsKey = c => nrm(c).replace(/^فصل\s+/, '');
   const dayW = n => n === 1 ? 'يوم واحد' : n === 2 ? 'يومين' : (n >= 3 && n <= 10) ? ad(n) + ' أيام' : ad(n) + ' يوم';
   /* ملاحظة تحت/جنب اسم اللي اختبر بعد ما كان غايب/مؤجل/بعذر */
-  const noteTxt = m => !m ? '' : (m.t === 'x' ? '📝 كان بعذر' : m.t === 'p' ? '⏳ كان مؤجل' : '⚠️ كان غايب في حصته') + ' (' + ad(m.d.slice(8) + '/' + m.d.slice(5, 7)) + ')';
+  const noteTxt = m => !m ? '' : (m.t === 'x' ? '📝 كان بعذر' : m.t === 'p' ? '⏳ كان مؤجل' : '⚠️ كان غايب في يوم اختبار فصله') + ' (' + ad(m.d.slice(8) + '/' + m.d.slice(5, 7)) + ')' + (m.n ? ' — عدد أيام الغياب: ' + ad(m.n) : '');
   const noteClr = m => m && m.t === 'x' ? '#1d4a73' : m && m.t === 'p' ? '#8A6A20' : '#8A1F1F';
   /* عذر / منقطع: بيجوا من برنامج الاختبارات ويظهروا جنب الغايبين والمؤجلين */
   const exNames = list => list.map((x, k) => ad(k + 1) + '. ' + esc(x.name)).join(' &nbsp;•&nbsp; ');
@@ -686,7 +686,7 @@ $('bkBtn').addEventListener('click', () => {
           dates.forEach(d => {
             if(last && gap(last, d) > 14) cyc = [];
             rowsC.filter(r => dOf(r) === d).forEach(r => { const k = nm2(r.student); if(k && !cyc.some(c => sameStu(c, k))) cyc.push(k); });
-            if(roster.every(m => { const k = nm2(m); return cyc.some(c => sameStu(c, k)) || drOf(k).length || mvOf(k).length; })) cyc = [];
+            if(d < end && roster.every(m => { const k = nm2(m); return cyc.some(c => sameStu(c, k)) || drOf(k).length || mvOf(k).length; })) cyc = []; /* الدورة بتتصفّر بس لو خلصت قبل تاريخ التقرير، مش في نفس اليوم */
             last = d;
           });
           return cyc;
@@ -722,6 +722,27 @@ $('bkBtn').addEventListener('click', () => {
             if(tt.some(t => t >= m.d && t < testD)) return; /* اختبر بعد الغياب ده بالفعل: الملاحظة تخص اختبار تاني */
             if(!best || m.d > best.d || (m.d === best.d && m.t === 'x')) best = m;
           });
+          if(!best && !indOfClass(cn)){
+            /* مفيش علامة غياب: لو الفصل اختبر قبل كده في يوم أكبر (حصته الأساسية) والطالب ده ماكانش فيهم واختبر بعدها → كان غايب يوم اختبار فصله */
+            const key = clsKey(cn), cnt = {};
+            results.filter(valid).filter(r => clsKey(r.className) === key).forEach(r => { const dd = dOf(r), kk = nm2(r.student); if(!/^\d{4}-\d{2}-\d{2}$/.test(dd) || !kk) return; const o2 = cnt[dd] = cnt[dd] || []; if(!o2.some(x => sameStu(x, kk))) o2.push(kk); });
+            const nD = (cnt[testD] || []).length;
+            Object.keys(cnt).sort().forEach(dd => {
+              if(dd >= testD || cnt[dd].length < 2 || cnt[dd].length <= nD || gapD(dd, testD) > 14) return;
+              if(tt.some(t => t >= dd && t < testD)) return;
+              best = {k: k, d: dd, t: 'i'};
+            });
+          }
+          if(best && (best.t === 'a' || best.t === 'i')){
+            let n = 0; const seenD = {};
+            allM.forEach(m => {
+              if(m.t !== 'a' || !sameStu(k, m.k) || !/^\d{4}-\d{2}-\d{2}$/.test(m.d) || m.d >= testD || gapD(m.d, testD) > 14 || seenD[m.d]) return;
+              if(tt.some(t => t >= m.d && t < testD)) return;
+              if(allM.some(q => q.t === 'p' && q.d === m.d && sameStu(k, q.k))) return;
+              seenD[m.d] = 1; n++;
+            });
+            best = Object.assign({}, best, {n: n || 1});
+          }
           return best;
         }catch(e){ return null; }
       };
