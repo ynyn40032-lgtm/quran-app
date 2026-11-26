@@ -748,7 +748,7 @@ $('bkBtn').addEventListener('click', () => {
           return best;
         }catch(e){ return null; }
       };
-      out[cn] = {absent, postponed, excused, dropped, moved, pending, pendList, total: hasR ? roster.length : 0, daysOf, noteOf};
+      out[cn] = {absent, postponed, excused, dropped, moved, pending, pendList, total: hasR ? roster.length : 0, rosterNames: roster.slice(), daysOf, noteOf};
     });
     return out;
   }
@@ -761,10 +761,23 @@ $('bkBtn').addEventListener('click', () => {
     if(!ds.length) return todayTxt;
     return ds.map(d => DAYN[new Date(d + 'T12:00:00').getDay()] + ' ' + ad(d.slice(8) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4))).join(' • ');
   }
+  /* 🆕 فصول متعلّم فيها غياب/تأجيل/عذر لكن مفيهاش اختبار في الفترة دي: كانت بتختفي من التقرير خالص */
+  function extraAbs(gs, o){
+    try{
+      const have = new Set(gs.map(g => clsKey(g.name))), names = {};
+      rosters.forEach(x => { const c = String(x.className || '').trim(); if(!c) return; if(o.cls && clsKey(c) !== clsKey(o.cls)) return; if(!have.has(clsKey(c))) names[clsKey(c)] = c; });
+      const fake = Object.keys(names).map(k => ({name: names[k], rows: []}));
+      if(!fake.length) return [];
+      const AB = absentMap(fake, o);
+      return fake.map(g => ({name: g.name, ab: AB[g.name]})).filter(x => x.ab && (x.ab.absent.length || x.ab.postponed.length || x.ab.excused.length || x.ab.dropped.length || x.ab.moved.length));
+    }catch(e){ return []; }
+  }
   function bodyHtml(o){
     const gs = compute(o), today = dateLine(o, gs);
     let h = '<div class="cr-head"><div class="c">مركز الأمين الثقافي التربوي</div><div class="t">تقرير إجمالي بنتائج الفصول — ' + (o.surah ? 'اختبارات القرآن واختبار على سورة' : 'اختبارات القرآن') + '</div><div class="d">' + today + '</div></div>';
-    if(!gs.length) return h + '<div style="text-align:center;padding:20px;color:#777;font-weight:700">' + ((o.from && o.from === o.to) ? 'لا يوجد اختبار لليوم ده' + (o.cls ? '<div style="font-size:15px;margin-top:6px;color:#8A6A20">لو عايزة كل اختبارات الفصل ده، اضغطي زرار «كل الأيام» فوق.</div>' : '') : (o.from ? 'لا يوجد اختبار في الفترة دي' : 'مفيش اختبارات تطابق الاختيار ده.')) + '</div>';
+    const EX = extraAbs(gs, o);
+    if(!gs.length) h += '<div style="text-align:center;padding:20px;color:#777;font-weight:700">' + ((o.from && o.from === o.to) ? 'لا يوجد اختبار لليوم ده' + (o.cls ? '<div style="font-size:15px;margin-top:6px;color:#8A6A20">لو عايزة كل اختبارات الفصل ده، اضغطي زرار «كل الأيام» فوق.</div>' : '') : (o.from ? 'لا يوجد اختبار في الفترة دي' : 'مفيش اختبارات تطابق الاختيار ده.')) + '</div>';
+    if(!gs.length && !EX.length) return h;
     const AB = absentMap(gs, o), abShown = {};
     gs.forEach((g, gi) => {
       let pass = 0, fail = 0;
@@ -783,9 +796,16 @@ $('bkBtn').addEventListener('click', () => {
         ' <span style="color:#8A6A20">— المحفظ/ة: ' + (sv.length ? esc(sv.join('، ').replace(/^\s*أ\s*[.\/]\s*/, '')) : 'غير محددة') + '</span>' +
         (sj.length ? ' <span style="color:#1d4f8a">— ' + esc(sj.join('، ')) + '</span>' : '') +
         (ss.length ? ' <span style="color:#1d4f8a">— السورة: ' + esc(ss.join('، ')) + '</span>' : '') +
-        ' <small>(' + (ab0 && ab0.total ? 'عدد طلاب الفصل: ' + ad(ab0.total) + ' — اختبر: ' + ad(new Set(g.rows.map(r => nm2(r.student))).size) : 'عدد الطلاب: ' + ad(g.rows.length)) + ' — ناجح: ' + ad(pass) + ' — راسب: ' + ad(fail) + (ab && ab.absent.length ? ' — <span style="color:#8A1F1F">غايب: ' + ad(ab.absent.length) + '</span>' : '') + (ab && ab.postponed.length ? ' — <span style="color:#8A6A20">مؤجل: ' + ad(ab.postponed.length) + '</span>' : '') + extraHead(ab) + ')</small></h3>' +
+        ' <small>(' + (ab0 && ab0.total ? 'عدد طلاب الفصل: ' + ad(ab0.total + [...new Set(g.rows.map(r => nm2(r.student)))].filter(k => !(ab0.rosterNames || []).some(m => sameStu(nm2(m), k))).length) + ' — اختبر: ' + ad(new Set(g.rows.map(r => nm2(r.student))).size) : 'عدد الطلاب: ' + ad(g.rows.length)) + ' — ناجح: ' + ad(pass) + ' — راسب: ' + ad(fail) + (ab && ab.absent.length ? ' — <span style="color:#8A1F1F">غايب: ' + ad(ab.absent.length) + '</span>' : '') + (ab && ab.postponed.length ? ' — <span style="color:#8A6A20">مؤجل: ' + ad(ab.postponed.length) + '</span>' : '') + extraHead(ab) + ')</small></h3>' +
         '<table><thead><tr><th>م</th><th>الإسم</th><th>عدد الأخطاء</th><th>الدرجة</th><th>النتيجة</th></tr></thead><tbody>' + rows + '</tbody></table>' +
         (ab ? (ab.absent.length ? '<div class="cr-abs"><b>الغايبين (' + ad(ab.absent.length) + '):</b> ' + ab.absent.map((x, k) => ad(k + 1) + '. ' + esc(x.name) + (x.days ? ' <small>(غاب: ' + dayW(x.days) + (x.tested ? ' — واختبر بعدها' : '') + ')</small>' : '')).join(' &nbsp;•&nbsp; ') + '</div>' : (ab.postponed.length || ab.excused.length || ab.dropped.length || ab.moved.length || !ab.total || ab.pending ? '' : '<div class="cr-abs ok">✅ مفيش غايبين (كل طلاب الفصل اختبروا)</div>')) + (ab.postponed.length ? '<div class="cr-abs" style="border-color:#8A6A20;background:#fff8e6;color:#7a5a10"><b>⏳ المؤجلين (' + ad(ab.postponed.length) + ') — حضروا ومكنوش حافظين:</b> ' + ab.postponed.map((x, k) => ad(k + 1) + '. ' + esc(x.name) + (x.days ? ' <small>(غاب قبل كده: ' + dayW(x.days) + ')</small>' : '')).join(' &nbsp;•&nbsp; ') + '</div>' : '') + extraHtml(ab) + (ab.pendList && ab.pendList.length ? '<div class="cr-abs" style="border-color:#888;background:#f6f6f6;color:#444"><b>🕓 لم يختبر بعد (' + ad(ab.pendList.length) + '):</b> ' + exNames(ab.pendList) + '</div>' : '') : '') + '</div>';
+    });
+    EX.forEach(x => {
+      const ab = x.ab;
+      h += '<div class="cr-sec"><h3>الفصل: ' + esc(x.name) + ' <small>(مفيش اختبار في الفترة دي)</small></h3>' +
+        (ab.absent.length ? '<div class="cr-abs"><b>الغايبين (' + ad(ab.absent.length) + '):</b> ' + ab.absent.map((y, k) => ad(k + 1) + '. ' + esc(y.name) + (y.days ? ' <small>(غاب: ' + dayW(y.days) + ')</small>' : '')).join(' &nbsp;•&nbsp; ') + '</div>' : '') +
+        (ab.postponed.length ? '<div class="cr-abs" style="border-color:#8A6A20;background:#fff8e6;color:#7a5a10"><b>⏳ المؤجلين (' + ad(ab.postponed.length) + '):</b> ' + ab.postponed.map((y, k) => ad(k + 1) + '. ' + esc(y.name)).join(' &nbsp;•&nbsp; ') + '</div>' : '') +
+        extraHtml(ab) + '</div>';
     });
     return h;
   }
