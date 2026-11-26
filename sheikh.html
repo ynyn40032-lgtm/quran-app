@@ -643,7 +643,7 @@ $('bkBtn').addEventListener('click', () => {
   const clsKey = c => nrm(c).replace(/^فصل\s+/, '');
   const dayW = n => n === 1 ? 'يوم واحد' : n === 2 ? 'يومين' : (n >= 3 && n <= 10) ? ad(n) + ' أيام' : ad(n) + ' يوم';
   /* ملاحظة تحت/جنب اسم اللي اختبر بعد ما كان غايب/مؤجل/بعذر */
-  const noteTxt = m => !m ? '' : (m.t === 'x' ? '📝 كان بعذر' : m.t === 'p' ? '⏳ كان مؤجل' : '⚠️ كان غايب في يوم اختبار فصله') + ' (' + ad(m.d.slice(8) + '/' + m.d.slice(5, 7)) + ')' + (m.n ? ' — عدد أيام الغياب: ' + ad(m.n) : '');
+  const noteTxt = m => !m ? '' : (m.t === 'x' ? '📝 كان بعذر' : m.t === 'p' ? '⏳ كان مؤجل' : m.t === 'a' ? '⚠️ كان غايب يوم ' + (['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'][new Date(m.d + 'T12:00:00').getDay()]) : '⚠️ كان غايب في يوم اختبار فصله') + ' (' + ad(m.d.slice(8) + '/' + m.d.slice(5, 7) + '/' + m.d.slice(0, 4)) + ')' + (m.n ? ' — عدد أيام الغياب: ' + ad(m.n) : '');
   const noteClr = m => m && m.t === 'x' ? '#1d4a73' : m && m.t === 'p' ? '#8A6A20' : '#8A1F1F';
   /* عذر / منقطع: بيجوا من برنامج الاختبارات ويظهروا جنب الغايبين والمؤجلين */
   const exNames = list => list.map((x, k) => ad(k + 1) + '. ' + esc(x.name)).join(' &nbsp;•&nbsp; ');
@@ -720,7 +720,7 @@ $('bkBtn').addEventListener('click', () => {
           let best = null;
           allM.forEach(m => {
             if(!/^\d{4}-\d{2}-\d{2}$/.test(m.d) || m.d >= testD || !sameStu(k, m.k)) return;
-            if(gapD(m.d, testD) > 14) return;
+            if(gapD(m.d, testD) > 60) return;
             if(tt.some(t => t >= m.d && t < testD)) return; /* اختبر بعد الغياب ده بالفعل: الملاحظة تخص اختبار تاني */
             if(!best || m.d > best.d || (m.d === best.d && m.t === 'x')) best = m;
           });
@@ -738,7 +738,7 @@ $('bkBtn').addEventListener('click', () => {
           if(best && (best.t === 'a' || best.t === 'i')){
             let n = 0; const seenD = {};
             allM.forEach(m => {
-              if(m.t !== 'a' || !sameStu(k, m.k) || !/^\d{4}-\d{2}-\d{2}$/.test(m.d) || m.d >= testD || gapD(m.d, testD) > 14 || seenD[m.d]) return;
+              if(m.t !== 'a' || !sameStu(k, m.k) || !/^\d{4}-\d{2}-\d{2}$/.test(m.d) || m.d >= testD || gapD(m.d, testD) > 60 || seenD[m.d]) return;
               if(tt.some(t => t >= m.d && t < testD)) return;
               if(allM.some(q => q.t === 'p' && q.d === m.d && sameStu(k, q.k))) return;
               seenD[m.d] = 1; n++;
@@ -748,7 +748,7 @@ $('bkBtn').addEventListener('click', () => {
           return best;
         }catch(e){ return null; }
       };
-      out[cn] = {absent, postponed, excused, dropped, moved, pending, pendList, total: hasR ? roster.length : 0, rosterNames: roster.slice(), daysOf, noteOf};
+      out[cn] = {absent, postponed, excused, dropped, moved, pending, pendList, total: hasR ? Math.max(0, roster.length - moved.length) : 0 /* المنقول مش بيتحسب في عدد الفصل */, rosterNames: roster.slice(), daysOf, noteOf};
     });
     return out;
   }
@@ -802,10 +802,14 @@ $('bkBtn').addEventListener('click', () => {
     });
     EX.forEach(x => {
       const ab = x.ab;
-      h += '<div class="cr-sec"><h3>الفصل: ' + esc(x.name) + ' <small>(مفيش اختبار في الفترة دي)</small></h3>' +
+      h += '<div class="cr-sec"><h3>الفصل: ' + esc(x.name) + ' <small>(' + (ab.total ? 'عدد طلاب الفصل: ' + ad(ab.total) + ' — اختبر: ' + ad(0) + ' — ' : '') + 'ناجح: ' + ad(0) + ' — راسب: ' + ad(0) +
+        (ab.absent.length ? ' — <span style="color:#8A1F1F">غايب: ' + ad(ab.absent.length) + '</span>' : '') +
+        (ab.postponed.length ? ' — <span style="color:#8A6A20">مؤجل: ' + ad(ab.postponed.length) + '</span>' : '') +
+        extraHead(ab) + ') — مفيش اختبار في الفترة دي</small></h3>' +
         (ab.absent.length ? '<div class="cr-abs"><b>الغايبين (' + ad(ab.absent.length) + '):</b> ' + ab.absent.map((y, k) => ad(k + 1) + '. ' + esc(y.name) + (y.days ? ' <small>(غاب: ' + dayW(y.days) + ')</small>' : '')).join(' &nbsp;•&nbsp; ') + '</div>' : '') +
         (ab.postponed.length ? '<div class="cr-abs" style="border-color:#8A6A20;background:#fff8e6;color:#7a5a10"><b>⏳ المؤجلين (' + ad(ab.postponed.length) + '):</b> ' + ab.postponed.map((y, k) => ad(k + 1) + '. ' + esc(y.name)).join(' &nbsp;•&nbsp; ') + '</div>' : '') +
-        extraHtml(ab) + '</div>';
+        extraHtml(ab) +
+        (ab.pendList && ab.pendList.length ? '<div class="cr-abs" style="border-color:#888;background:#f6f6f6;color:#444"><b>🕓 لم يختبر بعد (' + ad(ab.pendList.length) + '):</b> ' + exNames(ab.pendList) + '</div>' : '') + '</div>';
     });
     return h;
   }
@@ -1223,7 +1227,7 @@ $('bkBtn').addEventListener('click', () => {
       const cs = Object.keys(D.T[n]).sort((a, b) => D.T[n][a].name.localeCompare(D.T[n][b].name, 'ar') || (D.T[n][a].kind === 's' ? 1 : 0) - (D.T[n][b].kind === 's' ? 1 : 0)), nf = cs.filter(c => D.T[n][c].fail).length;
       box.innerHTML = TOPBTN('tcClose2') + '<h2>' + esc(n) + ' — شهر ' + esc(D.month) + '</h2><div class="tc-sub">الفصول اللي اختبرت الشهر ده</div>' +
         (nf ? '<div class="tc-sum">عدد الفصول: ' + ad(cs.length) + ' — الراسب منها: ' + ad(nf) + '</div>' : '<div class="tc-all">✅ كل الفصول ناجحة (' + ad(cs.length) + ' فصل)</div>') +
-        cs.map(c => { const x = D.T[n][c], sur = x.kind === 's'; return '<div class="tc-c' + (x.fail ? ' bad' : '') + '"><span><b>' + esc(x.name) + '</b>' + (x.ind ? '<span style="display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;background:#efe6ff;color:#5b3a9a;margin-inline-start:4px;">🧍 فردي</span>' : '') + ' ' + kindBadge(x) + (x.subs.length && !x.ind ? '<br><small style="color:#777;font-weight:600">' + esc(x.subs.join('، ')) + '</small>' : '') + (x.sups.some(v => nrm(v) !== nrm(x.tn)) ? '<br><small style="color:#b02a2a;font-weight:700">⚠️ المكتوب في «اسم المحفظ/ة» وقت الاختبار: ' + esc(x.sups.join('، ')) + '</small>' : '') + (x.dates.length && !x.ind ? '<br><small style="color:#555;font-weight:700">🗓️ تاريخ الاختبار: ' + esc(x.dates.slice().sort().map(d => ad(d.slice(8) + '/' + d.slice(5, 7))).join('، ')) + '</small>' : '') + (x.ind ? indList(x) : '') + '</span>' + (x.ind ? '<span style="text-align:center;font-weight:800;line-height:1.5"><span style="color:#555;font-size:13px">' + ad(x.pass + x.fail) + ' طالب/ة</span><br><span class="tc-ok">✅ ' + ad(x.pass) + ' ناجح</span><br><span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">❌ ' + ad(x.fail) + ' راسب</span></span>' : '<span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">' + (x.fail ? 'راسب' : 'ناجح') + '</span>') + '</div>'; }).join('') +
+        cs.map(c => { const x = D.T[n][c], sur = x.kind === 's'; return '<div class="tc-c' + (x.fail ? ' bad' : '') + '"><span><b>' + esc(x.name) + '</b>' + (x.ind ? '<span style="display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;background:#efe6ff;color:#5b3a9a;margin-inline-start:4px;">🧍 فردي</span>' : '') + ' ' + kindBadge(x) + (x.subs.length && !x.ind ? '<br><small style="color:#777;font-weight:600">' + esc(x.subs.join('، ')) + '</small>' : '') + (x.sups.some(v => nrm(v) !== nrm(x.tn)) ? '<br><small style="color:#b02a2a;font-weight:700">⚠️ المكتوب في «اسم المحفظ/ة» وقت الاختبار: ' + esc(x.sups.join('، ')) + '</small>' : '') + (x.dates.length && !x.ind ? '<br><small style="color:#555;font-weight:700">🗓️ تاريخ الاختبار: ' + esc(x.dates.slice().sort().map(d => ad(d.slice(8) + '/' + d.slice(5, 7))).join('، ')) + '</small>' : '') + (x.ind ? indList(x) : '') + '</span>' + ('<span style="text-align:center;font-weight:800;line-height:1.5"><span style="color:#555;font-size:13px">' + ad(x.pass + x.fail) + ' طالب/ة</span><br><span class="tc-ok">✅ ' + ad(x.pass) + ' ناجح</span><br><span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">❌ ' + ad(x.fail) + ' راسب</span></span>') + '</div>'; }).join('') +
         '<button type="button" class="tc-b" id="tcBack">↩ كل المحفظات</button><button type="button" class="tc-b" id="tcClose">إغلاق</button>';
       box.querySelector('#tcBack').onclick = showList;
       box.querySelector('#tcClose').onclick = close; box.querySelector('#tcClose2').onclick = close;
@@ -1235,7 +1239,7 @@ $('bkBtn').addEventListener('click', () => {
       /* الشهور متتابعة من أول شهر فيه اختبارات لحد الشهر الحالي (ديسمبر بعد نوفمبر، وبعد ديسمبر السنة الجديدة)، حتى لو شهر ماكانش فيه اختبارات */
       const now0 = new Date(), nowYm = now0.getFullYear() + '-' + p2(now0.getMonth() + 1);
       if(yms.length){ let yy = +yms[0].slice(0, 4), mm = +yms[0].slice(5, 7); const lastYm = yms[yms.length - 1] > nowYm ? yms[yms.length - 1] : nowYm, all = []; for(let g = 0; g < 600; g++){ const k = yy + '-' + p2(mm); all.push(k); if(k >= lastYm) break; mm++; if(mm > 12){ mm = 1; yy++; } } yms = all; }
-      const cardOf = x => '<div class="tc-c' + (x.fail ? ' bad' : '') + '"><span><b>' + esc(x.name) + '</b>' + (x.ind ? '<span style="display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;background:#efe6ff;color:#5b3a9a;margin-inline-start:4px;">🧍 فردي</span>' : '') + ' ' + kindBadge(x) + (x.subs.length && !x.ind ? '<br><small style="color:#777;font-weight:600">' + esc(x.subs.join('، ')) + '</small>' : '') + (x.sups.some(v => nrm(v) !== nrm(x.tn)) ? '<br><small style="color:#b02a2a;font-weight:700">⚠️ المكتوب في «اسم المحفظ/ة» وقت الاختبار: ' + esc(x.sups.join('، ')) + '</small>' : '') + (x.dates.length && !x.ind ? '<br><small style="color:#555;font-weight:700">🗓️ تاريخ الاختبار: ' + esc(x.dates.slice().sort().map(d => ad(d.slice(8) + '/' + d.slice(5, 7))).join('، ')) + '</small>' : '') + (x.ind ? indList(x) : '') + '</span>' + (x.ind ? '<span style="text-align:center;font-weight:800;line-height:1.5"><span style="color:#555;font-size:13px">' + ad(x.pass + x.fail) + ' طالب/ة</span><br><span class="tc-ok">✅ ' + ad(x.pass) + ' ناجح</span><br><span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">❌ ' + ad(x.fail) + ' راسب</span></span>' : '<span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">' + (x.fail ? 'راسب' : 'ناجح') + '</span>') + '</div>';
+      const cardOf = x => '<div class="tc-c' + (x.fail ? ' bad' : '') + '"><span><b>' + esc(x.name) + '</b>' + (x.ind ? '<span style="display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:800;background:#efe6ff;color:#5b3a9a;margin-inline-start:4px;">🧍 فردي</span>' : '') + ' ' + kindBadge(x) + (x.subs.length && !x.ind ? '<br><small style="color:#777;font-weight:600">' + esc(x.subs.join('، ')) + '</small>' : '') + (x.sups.some(v => nrm(v) !== nrm(x.tn)) ? '<br><small style="color:#b02a2a;font-weight:700">⚠️ المكتوب في «اسم المحفظ/ة» وقت الاختبار: ' + esc(x.sups.join('، ')) + '</small>' : '') + (x.dates.length && !x.ind ? '<br><small style="color:#555;font-weight:700">🗓️ تاريخ الاختبار: ' + esc(x.dates.slice().sort().map(d => ad(d.slice(8) + '/' + d.slice(5, 7))).join('، ')) + '</small>' : '') + (x.ind ? indList(x) : '') + '</span>' + ('<span style="text-align:center;font-weight:800;line-height:1.5"><span style="color:#555;font-size:13px">' + ad(x.pass + x.fail) + ' طالب/ة</span><br><span class="tc-ok">✅ ' + ad(x.pass) + ' ناجح</span><br><span class="' + (x.fail ? 'tc-no' : 'tc-ok') + '">❌ ' + ad(x.fail) + ' راسب</span></span>') + '</div>';
       box.innerHTML = TOPBTN('tcClose2') + '<h2>📅 الاختبارات بترتيب الشهور</h2><div class="tc-sub">كل شهر وفيه فصوله اللي اختبرت، تحت اسم محفظتها</div>' +
         (yms.length ? yms.map((ym, ix) => {
           const M = tcData(ym), ns = Object.keys(M.T).sort((a, b) => a.localeCompare(b, 'ar'));
