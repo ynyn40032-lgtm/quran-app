@@ -705,7 +705,7 @@ $('bkBtn').addEventListener('click', () => {
         else if(hit < 0 && drOf(k).length) dropped.push({name: n}); /* منقطع: مش غايب */
         else if(hit < 0 && mvOf(k).length) moved.push({name: n}); /* منقول: مش غايب */
         else if(hit < 0 && poOf(k).length) postponed.push({name: n, days: d}); /* حضر ومكنش حافظ فاتأجّل: مش غايب */
-        else if(hit < 0 && nOf(k).length && !d){ pending++; pendList.push({name: n}); return; } /* لم يختبر: متعلّم عليه بإيدك من برنامج الاختبارات */
+        else if(hit < 0 && nOf(k).length){ pending++; pendList.push({name: n}); return; } /* لم يختبر: متعلّم عليه بإيدك من برنامج الاختبارات */
         else if(hit < 0 && !d){ pending++; return; } /* مش متعلّم عليه: مايظهرش في القايمة (بيتحسب بس عشان رسالة «مفيش غايبين» ماتظهرش غلط) */ /* مفيش علامة غياب من المختبِرة: مش غايب (بس لسه مااختبرش) */
         else if(hit < 0) absent.push({name: n, days: d, tested: false});
         /* اللي اختبر مش بيتحسب غايب خلاص، حتى لو كان غايب قبل كده */
