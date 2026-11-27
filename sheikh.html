@@ -119,6 +119,13 @@ select,input,textarea{max-width:100% !important;box-sizing:border-box}
 #clsRepOv .cr-ctl select,#clsRepOv .cr-ctl input,#trOv .tr-ctl select,#trOv .tr-ctl input,#tcOv select,#tcOv input{max-width:100% !important;min-width:0 !important;width:100% !important}
 #clsRepOv .cr-ctl,#trOv .tr-ctl,#tcOv .tc-ctl{max-width:100%;overflow-wrap:anywhere}
 .chips,#trOv .tr-tabs{flex-wrap:wrap !important;overflow-x:visible !important}
+/* منع الصفحة من الاتساع للجنب مع التكبير (نفس اللي في برنامج الاختبارات) */
+html,body{max-width:100%;overflow-x:hidden}
+header{flex-wrap:wrap}
+header > *{min-width:0}
+.hbtns{flex-wrap:wrap}
+#trOv .tr-tabs button,#trOv .tr-b{white-space:normal !important;max-width:100%}
+header small{overflow-wrap:anywhere;max-width:100%}
 </style>
 </head>
 <body>
@@ -1666,7 +1673,7 @@ $('bkBtn').addEventListener('click', () => {
 })();
 </script>
 <script>
-/* أزرار التكبير والتصغير (نفس اللي في برنامج الاختبارات) */
+/* أزرار التكبير والتصغير (نفس اللي في برنامج الاختبارات بالظبط) */
 (function(){
   var STEP = 0.1, MIN = 0.5, MAX = 2.0;
   var zoom = parseFloat(localStorage.getItem('sheikhZoomLevel')) || 1;
@@ -1675,6 +1682,8 @@ $('bkBtn').addEventListener('click', () => {
     document.body.style.zoom = zoom;
     localStorage.setItem('sheikhZoomLevel', zoom);
     label.textContent = Math.round(zoom * 100) + '%';
+    /* بعد التكبير/التصغير: نخلّي التقارير المفتوحة تعيد ضبط عرضها على الشاشة عشان مفيش حاجة تتقص */
+    try{ setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, 0); }catch(e){}
   }
 
   var wrap = document.createElement('div');
@@ -1712,12 +1721,7 @@ $('bkBtn').addEventListener('click', () => {
     wrap.style.display = zHidden ? 'none' : 'flex';
     zTab.style.display = zHidden ? 'block' : 'none';
     try{ localStorage.setItem('sheikhZoomHidden', zHidden ? '1' : '0'); }catch(e){}
-    if(!zHidden) zTouch();
   }
-  /* بيختفي لوحده بعد ٣ ثواني من آخر لمسة، ويفضل بس شريط صغير على الحافة، عشان مايغطّيش الكلام. دوسي على الشريط (‹) يرجع تاني */
-  var zIdle = null;
-  function zTouch(){ clearTimeout(zIdle); zIdle = setTimeout(function(){ if(!zHidden){ zHidden = true; zApply(); } }, 3000); }
-  wrap.addEventListener('pointerdown', function(){ zTouch(); }, true);
   zHideBtn.onclick = function(){ zHidden = true; zApply(); };
   zTab.onclick = function(){ zHidden = false; zApply(); };
   window.__sheikhZoomToggle = function(){ zHidden = !zHidden; zApply(); };
@@ -1728,37 +1732,20 @@ $('bkBtn').addEventListener('click', () => {
   wrap.appendChild(plusBtn);
   wrap.appendChild(label);
   wrap.appendChild(minusBtn);
-
-  /* 🆕 قابل للسحب: اسحبي المقبض ⠿ أو النسبة المئوية وحطّيه في أي مكان */
-  var grip = document.createElement('div');
-  grip.textContent = '⠿'; grip.setAttribute('aria-label', 'اسحبي لتحريك الأزرار');
-  grip.style.cssText = 'width:38px;height:22px;color:#C7963E;font-size:20px;line-height:22px;text-align:center;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;';
-  wrap.insertBefore(grip, wrap.firstChild);
-  label.style.touchAction = 'none'; label.style.userSelect = 'none'; label.style.padding = '4px 0';
-  function clampPos(x, y){ return { x: Math.max(0, Math.min(window.innerWidth - wrap.offsetWidth, x)), y: Math.max(0, Math.min(window.innerHeight - wrap.offsetHeight, y)) }; }
-  function setPos(x, y){ var p = clampPos(x, y); wrap.style.right = 'auto'; wrap.style.bottom = 'auto'; wrap.style.left = p.x + 'px'; wrap.style.top = p.y + 'px'; return p; }
-  function makeDraggable(h){
-    h.addEventListener('pointerdown', function(e){
-      var r = wrap.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top;
-      try{ h.setPointerCapture(e.pointerId); }catch(_){}
-      function mv(ev){ setPos(ev.clientX - ox, ev.clientY - oy); ev.preventDefault(); }
-      function up(){ h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up);
-        try{ var rr = wrap.getBoundingClientRect(); localStorage.setItem('sheikhZoomPos', JSON.stringify({x: rr.left, y: rr.top})); }catch(_){} }
-      h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
-      e.preventDefault();
-    });
-  }
-  makeDraggable(grip); makeDraggable(label);
-  function restorePos(){ try{ var p = JSON.parse(localStorage.getItem('sheikhZoomPos') || 'null'); if(p && isFinite(p.x) && isFinite(p.y)) setPos(p.x, p.y); }catch(_){} }
-  window.addEventListener('resize', function(){ if(wrap.style.left){ setPos(parseFloat(wrap.style.left), parseFloat(wrap.style.top)); } });
   document.addEventListener('DOMContentLoaded', function(){
-    document.documentElement.appendChild(wrap);
-    apply(); restorePos();
+    document.body.appendChild(wrap);
+    apply();
   });
   if (document.readyState !== 'loading'){
-    document.documentElement.appendChild(wrap);
-    apply(); restorePos();
+    document.body.appendChild(wrap);
+    apply();
   }
+  /* أي شاشة بتتفتح (المحفظات / التقارير / إجمالي الفصول) بتتضاف في الآخر، فبنرجّع أزرار التكبير في الآخر عشان تفضل ظاهرة فوقها */
+  try{
+    new MutationObserver(function(){
+      if(wrap.parentNode === document.body && document.body.lastElementChild !== wrap) document.body.appendChild(wrap);
+    }).observe(document.body || document.documentElement, {childList: true});
+  }catch(e){}
 })();
 </script>
 <script>
