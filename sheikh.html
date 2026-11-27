@@ -1644,6 +1644,11 @@ $('bkBtn').addEventListener('click', () => {
 
   function apply(){
     document.body.style.zoom = zoom;
+    /* العرض بيتظبط مع التكبير عشان الكلام يفضل كله جوه الشاشة وينزل لسطر جديد بدل ما يطلع برّه */
+    document.body.style.width = (100 / zoom) + '%';
+    document.body.style.maxWidth = (100 / zoom) + '%';
+    document.body.style.overflowX = 'hidden';
+    document.documentElement.style.overflowX = 'hidden';
     localStorage.setItem('sheikhZoomLevel', zoom);
     label.textContent = Math.round(zoom * 100) + '%';
   }
