@@ -1731,12 +1731,13 @@ $('bkBtn').addEventListener('click', () => {
   zTab.style.cssText = 'position:fixed;right:0;bottom:20px;z-index:2147483647;width:20px;height:44px;border:none;border-radius:10px 0 0 10px;background:#0F2440;color:#C7963E;font:700 16px sans-serif;padding:0;opacity:0.7;display:none;';
   function zApply(){
     wrap.style.display = zHidden ? 'none' : 'flex';
-    zTab.style.display = zHidden ? 'block' : 'none';
+    zTab.style.display = 'none'; /* التابّ الصغير › متشالش من الشاشة خالص — الإظهار من قايمة ☰ */
     try{ localStorage.setItem('sheikhZoomHidden', zHidden ? '1' : '0'); }catch(e){}
   }
   zHideBtn.onclick = function(){ zHidden = true; zApply(); };
   zTab.onclick = function(){ zHidden = false; zApply(); };
   window.__sheikhZoomToggle = function(){ zHidden = !zHidden; zApply(); };
+  window.__sheikhZoomShow = function(){ zHidden = false; zApply(); };
   function zMount(){ document.documentElement.appendChild(zTab); zApply(); }
   if (document.readyState !== 'loading') zMount(); else document.addEventListener('DOMContentLoaded', zMount);
 
@@ -1799,7 +1800,12 @@ $('bkBtn').addEventListener('click', () => {
     {ic: '⬆️', lab: 'فوق (أول الصفحة)', fn: function(){ goTo('top'); }},
     {ic: '↕️', lab: 'نص الصفحة', fn: function(){ goTo('mid'); }},
     {ic: '⬇️', lab: 'تحت (آخر الصفحة)', fn: function(){ goTo('bottom'); }},
-    {ic: '🔍', lab: 'أزرار التكبير والتصغير', fn: function(){ try{ if(window.__sheikhZoomToggle) window.__sheikhZoomToggle(); }catch(e){} }}
+    {ic: '🔍', lab: 'أزرار التكبير والتصغير', fn: function(){ try{ if(window.__sheikhZoomToggle) window.__sheikhZoomToggle(); }catch(e){} }},
+    {ic: '↩️', lab: 'رجّعي الأزرار مكانها زي الأول', fn: function(){
+      try{ localStorage.removeItem(POS); }catch(e){}
+      handle.style.top = '46%';
+      try{ if(window.__sheikhZoomShow) window.__sheikhZoomShow(); }catch(e){}
+    }}
   ];
   ITEMS.forEach(function(it){
     var b = document.createElement('button'); b.type = 'button';
