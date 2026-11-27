@@ -126,6 +126,8 @@ header > *{min-width:0}
 .hbtns{flex-wrap:wrap}
 #trOv .tr-tabs button,#trOv .tr-b{white-space:normal !important;max-width:100%}
 header small{overflow-wrap:anywhere;max-width:100%}
+html.cr-zbig #clsRepOv td.nm{white-space:normal !important}
+html.cr-zbig #clsRepOv .cr-acts button{flex:1 1 100% !important}
 </style>
 </head>
 <body>
@@ -1016,6 +1018,16 @@ $('bkBtn').addEventListener('click', () => {
     function fit(){
       const bd = g('crBody'); if(!bd) return;
       const box = bd.parentNode, cs = getComputedStyle(box), avail = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      /* مع التكبير: الجدول بيلفّ الكلام على عرض الشاشة (من غير ما يتصغّر) عشان الكلام الصغير يكبر هو كمان */
+      const zl = parseFloat(document.body.style.zoom) || 1;
+      if(zl > 1.05){
+        document.documentElement.classList.add('cr-zbig');
+        bd.style.zoom = '1'; bd.style.width = avail + 'px';
+        let ww = avail; bd.querySelectorAll('table').forEach(tb => { if(tb.scrollWidth > ww) ww = tb.scrollWidth; });
+        if(ww > avail){ bd.style.width = ww + 'px'; bd.style.zoom = String(avail / ww); }
+        return;
+      }
+      document.documentElement.classList.remove('cr-zbig');
       bd.style.zoom = '1'; bd.style.width = '400px';
       let w = 400; bd.querySelectorAll('table').forEach(tb => { if(tb.offsetWidth > w) w = tb.offsetWidth; });
       bd.style.width = w + 'px';
