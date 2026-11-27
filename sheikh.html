@@ -1,6 +1,28 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
+<script>
+/* منع النسخ القديمة: عند كل فتح بنسأل السيرفر (طلب خفيف) هل الملف اتغيّر؟ لو اتغيّر بنجيب النسخة الجديدة ونعيد التحميل مرة واحدة */
+(function(){
+  try{
+    if(!/^https?:$/.test(location.protocol)) return;
+    var u = location.pathname, key = 'appver:' + u;
+    fetch(u, {method: 'HEAD', cache: 'no-store'}).then(function(r){
+      var v = (r.headers.get('etag') || '') + '|' + (r.headers.get('last-modified') || '');
+      if(v === '|') return;
+      var old = null; try{ old = localStorage.getItem(key); }catch(e){}
+      try{ localStorage.setItem(key, v); }catch(e){}
+      var done = null; try{ done = sessionStorage.getItem(key); }catch(e){}
+      if((!old || old !== v) && !done){
+        try{ sessionStorage.setItem(key, '1'); }catch(e){}
+        fetch(u, {cache: 'reload'}).then(function(){ location.reload(); }).catch(function(){});
+      }
+    }).catch(function(){});
+  }catch(e){}
+})();
+</script>
+
 <script>
 /* تنضيف النسخ القديمة المتخزنة: بيشيل أي service worker وكاش قديم عشان التعديلات تظهر على طول */
 if('serviceWorker' in navigator){
@@ -42,7 +64,7 @@ if('serviceWorker' in navigator){
   .primary:disabled{ opacity:.6; }
   #loginMsg{ color:var(--bad); font-size:14px; min-height:20px; margin-top:10px; }
   #forgot{ color:#9C6F22; font-size:13px; }
-  .chips{ display:flex; gap:8px; overflow-x:auto; padding-bottom:6px; margin-bottom:10px; }
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; overflow-x:visible; padding-bottom:6px; margin-bottom:10px; }
   .chip{ flex:0 0 auto; border:1.5px solid var(--line); background:#fff; color:var(--navy); border-radius:999px; padding:7px 14px; font:inherit; font-size:14px; cursor:pointer; white-space:nowrap; }
   .chip.on{ background:var(--navy); color:#F4EFDC; border-color:var(--navy); }
   .sum{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
@@ -90,6 +112,13 @@ if('serviceWorker' in navigator){
   .tools{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
   .tools button{ flex:1 1 140px; border:1.5px solid var(--gold); background:#fff; color:var(--navy); border-radius:12px; padding:9px 8px; font:inherit; font-size:13.5px; font-weight:800; cursor:pointer; }
   .pm{ flex:1 1 100%; margin-top:6px; border:0; background:#E3F2E8; color:#1F5A3B; border-radius:10px; padding:7px 10px; font:inherit; font-size:13px; font-weight:800; cursor:pointer; }
+</style>
+<style id="zoomFit">
+/* مع التكبير: أي حاجة عريضة (قوايم، خانات، أزرار) متطلعش برّه الشاشة وتفضل كلها ظاهرة */
+select,input,textarea{max-width:100% !important;box-sizing:border-box}
+#clsRepOv .cr-ctl select,#clsRepOv .cr-ctl input,#trOv .tr-ctl select,#trOv .tr-ctl input,#tcOv select,#tcOv input{max-width:100% !important;min-width:0 !important;width:100% !important}
+#clsRepOv .cr-ctl,#trOv .tr-ctl,#tcOv .tc-ctl{max-width:100%;overflow-wrap:anywhere}
+.chips,#trOv .tr-tabs{flex-wrap:wrap !important;overflow-x:visible !important}
 </style>
 </head>
 <body>
@@ -1291,7 +1320,7 @@ $('bkBtn').addEventListener('click', () => {
   trCss.textContent =
     '#trOv{position:fixed;inset:0;z-index:2147483645;background:#1b2d4a;overflow:auto;padding:10px;direction:rtl;font-family:Cairo,Tahoma,Arial,sans-serif;color:#111}' +
     '#trOv .tr-box{background:#fff;max-width:860px;margin:0 auto;border-radius:14px;padding:12px;box-sizing:border-box}' +
-    '#trOv .tr-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:8px}' +
+    '#trOv .tr-tabs{display:flex;flex-wrap:wrap;gap:6px;overflow-x:visible;padding-bottom:6px;margin-bottom:8px}' +
     '#trOv .tr-tabs button,#trOv .tr-b{font:inherit;font-weight:800;font-size:14px;border:1px solid #C7963E;border-radius:10px;padding:8px 12px;background:#f6f1e3;color:#0F2440;cursor:pointer;white-space:nowrap}' +
     '#trOv .tr-tabs button.on,#trOv .tr-b.p{background:#0F2440;color:#F4EFDC;border-color:#0F2440}' +
     '#trOv .tr-ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;background:#f6f1e3;border:1px solid #C7963E;border-radius:10px;padding:8px;margin-bottom:10px;font-size:13px;font-weight:700}' +
@@ -1644,17 +1673,12 @@ $('bkBtn').addEventListener('click', () => {
 
   function apply(){
     document.body.style.zoom = zoom;
-    /* العرض بيتظبط مع التكبير عشان الكلام يفضل كله جوه الشاشة وينزل لسطر جديد بدل ما يطلع برّه */
-    document.body.style.width = (100 / zoom) + '%';
-    document.body.style.maxWidth = (100 / zoom) + '%';
-    document.body.style.overflowX = 'hidden';
-    document.documentElement.style.overflowX = 'hidden';
     localStorage.setItem('sheikhZoomLevel', zoom);
     label.textContent = Math.round(zoom * 100) + '%';
   }
 
   var wrap = document.createElement('div');
-  wrap.style.cssText = 'position:fixed;right:10px;bottom:14px;z-index:99999;display:flex;flex-direction:column;align-items:center;gap:6px;background:#0F2440;border-radius:14px;padding:8px 6px;box-shadow:0 4px 14px rgba(0,0,0,0.3);font-family:sans-serif;opacity:0.85;';
+  wrap.style.cssText = 'position:fixed;right:10px;bottom:14px;z-index:2147483647;display:flex;flex-direction:column;align-items:center;gap:6px;background:#0F2440;border-radius:14px;padding:8px 6px;box-shadow:0 4px 14px rgba(0,0,0,0.3);font-family:sans-serif;opacity:0.85;';
 
   function makeBtn(text, onClick){
     var b = document.createElement('button');
@@ -1683,12 +1707,17 @@ $('bkBtn').addEventListener('click', () => {
   zHideBtn.style.cssText = 'width:38px;height:24px;border:none;border-radius:8px;background:#5b6b82;color:#fff;font-size:13px;font-weight:800;line-height:1;padding:0;';
   var zTab = document.createElement('button');
   zTab.type = 'button'; zTab.textContent = '‹'; zTab.setAttribute('aria-label', 'إظهار أزرار التكبير');
-  zTab.style.cssText = 'position:fixed;right:0;bottom:20px;z-index:99999;width:20px;height:44px;border:none;border-radius:10px 0 0 10px;background:#0F2440;color:#C7963E;font:700 16px sans-serif;padding:0;opacity:0.7;display:none;';
+  zTab.style.cssText = 'position:fixed;right:0;bottom:20px;z-index:2147483647;width:20px;height:44px;border:none;border-radius:10px 0 0 10px;background:#0F2440;color:#C7963E;font:700 16px sans-serif;padding:0;opacity:0.7;display:none;';
   function zApply(){
     wrap.style.display = zHidden ? 'none' : 'flex';
     zTab.style.display = zHidden ? 'block' : 'none';
     try{ localStorage.setItem('sheikhZoomHidden', zHidden ? '1' : '0'); }catch(e){}
+    if(!zHidden) zTouch();
   }
+  /* بيختفي لوحده بعد ٣ ثواني من آخر لمسة، ويفضل بس شريط صغير على الحافة، عشان مايغطّيش الكلام. دوسي على الشريط (‹) يرجع تاني */
+  var zIdle = null;
+  function zTouch(){ clearTimeout(zIdle); zIdle = setTimeout(function(){ if(!zHidden){ zHidden = true; zApply(); } }, 3000); }
+  wrap.addEventListener('pointerdown', function(){ zTouch(); }, true);
   zHideBtn.onclick = function(){ zHidden = true; zApply(); };
   zTab.onclick = function(){ zHidden = false; zApply(); };
   window.__sheikhZoomToggle = function(){ zHidden = !zHidden; zApply(); };
@@ -1740,8 +1769,8 @@ $('bkBtn').addEventListener('click', () => {
   function lset(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
   var st = document.createElement('style');
   st.textContent =
-    '#sflHandle{position:fixed;left:6px;top:46%;z-index:2147483000;width:40px;height:40px;border-radius:50%;border:2px solid #C7963E;background:#0F2440;color:#fff;font:700 20px/1 Cairo,Tahoma,sans-serif;box-shadow:0 3px 12px rgba(0,0,0,.45);padding:0;touch-action:none;cursor:pointer;}' +
-    '#sflTray{position:fixed;left:54px;z-index:2147483000;display:none;min-width:190px;max-width:calc(100vw - 70px);max-height:calc(100vh - 24px);overflow-y:auto;background:#FBF8F0;border:2px solid #C7963E;border-radius:16px;padding:8px;box-shadow:0 8px 28px rgba(0,0,0,.4);direction:rtl;}' +
+    '#sflHandle{position:fixed;left:6px;top:46%;z-index:2147483647;width:40px;height:40px;border-radius:50%;border:2px solid #C7963E;background:#0F2440;color:#fff;font:700 20px/1 Cairo,Tahoma,sans-serif;box-shadow:0 3px 12px rgba(0,0,0,.45);padding:0;touch-action:none;cursor:pointer;}' +
+    '#sflTray{position:fixed;left:54px;z-index:2147483647;display:none;min-width:190px;max-width:calc(100vw - 70px);max-height:calc(100vh - 24px);overflow-y:auto;background:#FBF8F0;border:2px solid #C7963E;border-radius:16px;padding:8px;box-shadow:0 8px 28px rgba(0,0,0,.4);direction:rtl;}' +
     '#sflTray.open{display:block;}' +
     '#sflTray button{display:flex;align-items:center;gap:10px;width:100%;margin:0 0 6px;padding:10px 12px;border:1.5px solid #0F2440;border-radius:12px;background:#fff;color:#0F2440;font:700 15px Cairo,Tahoma,sans-serif;text-align:right;cursor:pointer;}' +
     '#sflTray button:last-child{margin-bottom:0;}' +
