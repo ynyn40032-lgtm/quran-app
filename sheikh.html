@@ -1,6 +1,20 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+<script>
+/* تنضيف النسخ القديمة المتخزنة: بيشيل أي service worker وكاش قديم عشان التعديلات تظهر على طول */
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(function(rs){
+    var had = rs.length;
+    return Promise.all(rs.map(function(r){ return r.unregister(); })).then(function(){
+      return window.caches ? caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }) : 0;
+    }).then(function(){
+      if(had && !sessionStorage.getItem('swCleaned')){ sessionStorage.setItem('swCleaned', '1'); location.reload(); }
+    });
+  }).catch(function(){});
+}
+</script>
+
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>تقارير الشيخ — مركز الأمين</title>
@@ -674,6 +688,17 @@ $('bkBtn').addEventListener('click', () => {
       const nOf = k => { let r = []; Object.keys(nt).forEach(a => { if(sameStu(k, a)) r = r.concat(nt[a]); }); return r; };
       const mvOf = k => { let r = []; Object.keys(mv).forEach(a => { if(sameStu(k, a)) r = r.concat(mv[a]); }); return r; };
       const daysOf = n => { const k = nm2(n), pd = poOf(k); let c = 0; Object.keys(abs).forEach(a => { if(sameStu(k, a)) c = Math.max(c, abs[a].filter(d => pd.indexOf(d) < 0).length); }); return c; };
+      /* 🆕 غياب بعد يوم التقرير: الطالب اللي ماختبرش وغيابه متسجّل بعد تاريخ الفترة (أو خارجها) في نفس دورة الفصل يفضل يظهر غايب عند فصله */
+      const cycStart = (() => { try{
+        const key = clsKey(cn), end = o.to || '9999-99-99';
+        const ds = [...new Set(results.filter(valid).filter(r => clsKey(r.className) === key && dOf(r) <= end).map(dOf))].filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+        if(!ds.length) return '';
+        const gp = (x, y) => Math.round((new Date(y + 'T12:00:00') - new Date(x + 'T12:00:00')) / 86400000);
+        let st = ds[ds.length - 1];
+        for(let i = ds.length - 1; i > 0; i--){ if(gp(ds[i - 1], ds[i]) > 14) break; st = ds[i - 1]; }
+        return st;
+      }catch(e){ return ''; } })();
+      const daysOf2 = n => { const base = daysOf(n); if(base || !cycStart) return base; const k = nm2(n), pd = poOf(k), seen = new Set(); allM.forEach(m => { if(m.t === 'a' && sameStu(k, m.k) && m.d >= cycStart && pd.indexOf(m.d) < 0) seen.add(m.d); }); return seen.size; };
       const tested = []; gs.filter(g => g.name === cn).forEach(g => g.rows.forEach(r => { const k = nm2(r.student); if(k && tested.indexOf(k) < 0) tested.push(k); }));
       /* 🔁 لو الفصل اختبر في حصة فاتت وفضل ناس مااختبروش: اللي اختبر في نفس الدورة مش غايب (حتى لو التقرير ليوم واحد) */
       const cycNames = (() => {
@@ -700,7 +725,7 @@ $('bkBtn').addEventListener('click', () => {
         for(let i = 0; i < tested.length; i++){ if(!used[i] && sameStu(k, tested[i])){ hit = i; break; } }
         if(hit >= 0) used[hit] = 1;
         if(hit < 0 && cycNames.some(c => sameStu(k, c))) return; /* اختبر قبل كده في نفس الدورة */
-        const d = daysOf(n);
+        const d = daysOf2(n);
         if(hit < 0 && exOf(k).length) excused.push({name: n}); /* عذر: مش غايب */
         else if(hit < 0 && drOf(k).length) dropped.push({name: n}); /* منقطع: مش غايب */
         else if(hit < 0 && mvOf(k).length) moved.push({name: n}); /* منقول: مش غايب */
@@ -1609,6 +1634,163 @@ $('bkBtn').addEventListener('click', () => {
   $('trBtn').addEventListener('click', openReports);
   window.openClassReport = openReport;
   $('crBtn').addEventListener('click', openReport);
+})();
+</script>
+<script>
+/* أزرار التكبير والتصغير (نفس اللي في برنامج الاختبارات) */
+(function(){
+  var STEP = 0.1, MIN = 0.5, MAX = 2.0;
+  var zoom = parseFloat(localStorage.getItem('sheikhZoomLevel')) || 1;
+
+  function apply(){
+    document.body.style.zoom = zoom;
+    localStorage.setItem('sheikhZoomLevel', zoom);
+    label.textContent = Math.round(zoom * 100) + '%';
+  }
+
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;right:10px;bottom:14px;z-index:99999;display:flex;flex-direction:column;align-items:center;gap:6px;background:#0F2440;border-radius:14px;padding:8px 6px;box-shadow:0 4px 14px rgba(0,0,0,0.3);font-family:sans-serif;opacity:0.85;';
+
+  function makeBtn(text, onClick){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = text;
+    b.style.cssText = 'width:38px;height:38px;border:none;border-radius:10px;background:#C7963E;color:#0F2440;font-size:20px;font-weight:800;line-height:1;';
+    b.onclick = onClick;
+    return b;
+  }
+
+  var plusBtn = makeBtn('+', function(){
+    zoom = Math.min(MAX, Math.round((zoom + STEP) * 100) / 100);
+    apply();
+  });
+  var minusBtn = makeBtn('−', function(){
+    zoom = Math.max(MIN, Math.round((zoom - STEP) * 100) / 100);
+    apply();
+  });
+  var label = document.createElement('div');
+  label.style.cssText = 'color:#F4EFDC;font-size:11px;font-weight:700;';
+
+  var zHidden = false;
+  try{ zHidden = localStorage.getItem('sheikhZoomHidden') === '1'; }catch(e){}
+  var zHideBtn = document.createElement('button');
+  zHideBtn.type = 'button'; zHideBtn.textContent = '✕'; zHideBtn.setAttribute('aria-label', 'إخفاء أزرار التكبير');
+  zHideBtn.style.cssText = 'width:38px;height:24px;border:none;border-radius:8px;background:#5b6b82;color:#fff;font-size:13px;font-weight:800;line-height:1;padding:0;';
+  var zTab = document.createElement('button');
+  zTab.type = 'button'; zTab.textContent = '‹'; zTab.setAttribute('aria-label', 'إظهار أزرار التكبير');
+  zTab.style.cssText = 'position:fixed;right:0;bottom:20px;z-index:99999;width:20px;height:44px;border:none;border-radius:10px 0 0 10px;background:#0F2440;color:#C7963E;font:700 16px sans-serif;padding:0;opacity:0.7;display:none;';
+  function zApply(){
+    wrap.style.display = zHidden ? 'none' : 'flex';
+    zTab.style.display = zHidden ? 'block' : 'none';
+    try{ localStorage.setItem('sheikhZoomHidden', zHidden ? '1' : '0'); }catch(e){}
+  }
+  zHideBtn.onclick = function(){ zHidden = true; zApply(); };
+  zTab.onclick = function(){ zHidden = false; zApply(); };
+  window.__sheikhZoomToggle = function(){ zHidden = !zHidden; zApply(); };
+  function zMount(){ document.documentElement.appendChild(zTab); zApply(); }
+  if (document.readyState !== 'loading') zMount(); else document.addEventListener('DOMContentLoaded', zMount);
+
+  wrap.appendChild(zHideBtn);
+  wrap.appendChild(plusBtn);
+  wrap.appendChild(label);
+  wrap.appendChild(minusBtn);
+
+  /* 🆕 قابل للسحب: اسحبي المقبض ⠿ أو النسبة المئوية وحطّيه في أي مكان */
+  var grip = document.createElement('div');
+  grip.textContent = '⠿'; grip.setAttribute('aria-label', 'اسحبي لتحريك الأزرار');
+  grip.style.cssText = 'width:38px;height:22px;color:#C7963E;font-size:20px;line-height:22px;text-align:center;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;';
+  wrap.insertBefore(grip, wrap.firstChild);
+  label.style.touchAction = 'none'; label.style.userSelect = 'none'; label.style.padding = '4px 0';
+  function clampPos(x, y){ return { x: Math.max(0, Math.min(window.innerWidth - wrap.offsetWidth, x)), y: Math.max(0, Math.min(window.innerHeight - wrap.offsetHeight, y)) }; }
+  function setPos(x, y){ var p = clampPos(x, y); wrap.style.right = 'auto'; wrap.style.bottom = 'auto'; wrap.style.left = p.x + 'px'; wrap.style.top = p.y + 'px'; return p; }
+  function makeDraggable(h){
+    h.addEventListener('pointerdown', function(e){
+      var r = wrap.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top;
+      try{ h.setPointerCapture(e.pointerId); }catch(_){}
+      function mv(ev){ setPos(ev.clientX - ox, ev.clientY - oy); ev.preventDefault(); }
+      function up(){ h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up);
+        try{ var rr = wrap.getBoundingClientRect(); localStorage.setItem('sheikhZoomPos', JSON.stringify({x: rr.left, y: rr.top})); }catch(_){} }
+      h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+      e.preventDefault();
+    });
+  }
+  makeDraggable(grip); makeDraggable(label);
+  function restorePos(){ try{ var p = JSON.parse(localStorage.getItem('sheikhZoomPos') || 'null'); if(p && isFinite(p.x) && isFinite(p.y)) setPos(p.x, p.y); }catch(_){} }
+  window.addEventListener('resize', function(){ if(wrap.style.left){ setPos(parseFloat(wrap.style.left), parseFloat(wrap.style.top)); } });
+  document.addEventListener('DOMContentLoaded', function(){
+    document.documentElement.appendChild(wrap);
+    apply(); restorePos();
+  });
+  if (document.readyState !== 'loading'){
+    document.documentElement.appendChild(wrap);
+    apply(); restorePos();
+  }
+})();
+</script>
+<script>
+/* زرار ☰ العايم (نفس اللي في برنامج الاختبارات): بيتسحب فوق وتحت، ودوسي عليه تفتح قايمة فيها الصعود والنزول وأزرار التكبير */
+(function(){
+  var POS = 'sfl:pos';
+  function lget(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  function lset(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
+  var st = document.createElement('style');
+  st.textContent =
+    '#sflHandle{position:fixed;left:6px;top:46%;z-index:2147483000;width:40px;height:40px;border-radius:50%;border:2px solid #C7963E;background:#0F2440;color:#fff;font:700 20px/1 Cairo,Tahoma,sans-serif;box-shadow:0 3px 12px rgba(0,0,0,.45);padding:0;touch-action:none;cursor:pointer;}' +
+    '#sflTray{position:fixed;left:54px;z-index:2147483000;display:none;min-width:190px;max-width:calc(100vw - 70px);max-height:calc(100vh - 24px);overflow-y:auto;background:#FBF8F0;border:2px solid #C7963E;border-radius:16px;padding:8px;box-shadow:0 8px 28px rgba(0,0,0,.4);direction:rtl;}' +
+    '#sflTray.open{display:block;}' +
+    '#sflTray button{display:flex;align-items:center;gap:10px;width:100%;margin:0 0 6px;padding:10px 12px;border:1.5px solid #0F2440;border-radius:12px;background:#fff;color:#0F2440;font:700 15px Cairo,Tahoma,sans-serif;text-align:right;cursor:pointer;}' +
+    '#sflTray button:last-child{margin-bottom:0;}' +
+    '#sflTray button .ic{min-width:28px;text-align:center;font-size:20px;}';
+  document.head.appendChild(st);
+  var handle = document.createElement('button'); handle.id = 'sflHandle'; handle.type = 'button'; handle.textContent = '☰'; handle.setAttribute('aria-label', 'القائمة');
+  var tray = document.createElement('div'); tray.id = 'sflTray';
+  document.documentElement.appendChild(handle); document.documentElement.appendChild(tray);
+  try{ var sp = JSON.parse(lget(POS) || 'null'); if(sp){ handle.style.top = Math.max(0, Math.min(sp.y, innerHeight - 50)) + 'px'; } }catch(e){}
+
+  /* السكرول: بنلاقي العنصر اللي بيتحرك فعلًا (الصفحة أو نافذة التقرير) */
+  function scroller(){
+    var el = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+    while(el && el !== document.body && el !== document.documentElement){
+      var cs = getComputedStyle(el), oy = cs.overflowY;
+      if((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight + 20) return el;
+      el = el.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
+  }
+  function goTo(where){
+    var s = scroller(), max = s.scrollHeight - s.clientHeight;
+    var y = where === 'top' ? 0 : (where === 'bottom' ? max : max / 2);
+    try{ s.scrollTo({top: y, behavior: 'smooth'}); }catch(e){ s.scrollTop = y; }
+  }
+  var ITEMS = [
+    {ic: '⬆️', lab: 'فوق (أول الصفحة)', fn: function(){ goTo('top'); }},
+    {ic: '↕️', lab: 'نص الصفحة', fn: function(){ goTo('mid'); }},
+    {ic: '⬇️', lab: 'تحت (آخر الصفحة)', fn: function(){ goTo('bottom'); }},
+    {ic: '🔍', lab: 'أزرار التكبير والتصغير', fn: function(){ try{ if(window.__sheikhZoomToggle) window.__sheikhZoomToggle(); }catch(e){} }}
+  ];
+  ITEMS.forEach(function(it){
+    var b = document.createElement('button'); b.type = 'button';
+    b.innerHTML = '<span class="ic">' + it.ic + '</span><span>' + it.lab + '</span>';
+    b.addEventListener('click', function(){ close(); setTimeout(it.fn, 30); });
+    tray.appendChild(b);
+  });
+  function place(){ var r = handle.getBoundingClientRect(), h = tray.offsetHeight, top = r.top; if(top + h > innerHeight - 8) top = Math.max(8, innerHeight - 8 - h); tray.style.top = top + 'px'; }
+  function open(){ tray.classList.add('open'); place(); }
+  function close(){ tray.classList.remove('open'); }
+  function toggle(){ tray.classList.contains('open') ? close() : open(); }
+  document.addEventListener('pointerdown', function(e){ if(tray.classList.contains('open') && !tray.contains(e.target) && e.target !== handle) close(); }, true);
+
+  /* سحب الزرار لفوق/تحت */
+  (function(){
+    var sy, oy, drag = false, moved = false;
+    handle.addEventListener('pointerdown', function(e){ drag = true; moved = false; sy = e.clientY; oy = handle.getBoundingClientRect().top; try{ handle.setPointerCapture(e.pointerId); }catch(_){} });
+    handle.addEventListener('pointermove', function(e){
+      if(!drag) return; var dy = e.clientY - sy; if(!moved && Math.abs(dy) < 8) return; moved = true;
+      handle.style.top = Math.max(0, Math.min(oy + dy, innerHeight - 44)) + 'px'; if(tray.classList.contains('open')) place(); e.preventDefault();
+    });
+    function end(){ if(!drag) return; drag = false; if(moved) lset(POS, JSON.stringify({y: parseFloat(handle.style.top)})); else toggle(); }
+    handle.addEventListener('pointerup', end); handle.addEventListener('pointercancel', function(){ drag = false; });
+  })();
 })();
 </script>
 </body>
