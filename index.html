@@ -271,20 +271,42 @@ function swLate(classes, todayKey, tm){
   });
   return out;
 }
+function swDiag(){
+  var now = new Date(), key = swIso(now), wd = now.getDay(), out = [];
+  var cl = []; try{ var r = JSON.parse(localStorage.getItem(SCHED_KEY) || 'null'); if(r && Array.isArray(r.classes)) cl = r.classes; }catch(e){}
+  out.push('اليوم: ' + key);
+  out.push('— فصول الجدول النهارده —');
+  cl.filter(function(c){ if(c.dates && c.dates.length) return c.dates.indexOf(key) !== -1; return c.day !== null && c.day !== undefined && c.day === wd; }).forEach(function(c){ out.push(c.name + ' | فرع: ' + c.branch + ' | اسم مقارنة: ' + swBase(c.name)); });
+  [['quran-tests:list','سجل'],['quran-single-surah:list','سورة']].forEach(function(p){
+    var a = []; try{ a = JSON.parse(localStorage.getItem(p[0]) || '[]'); }catch(e){}
+    if(!Array.isArray(a)) a = [];
+    var ds = {}; a.forEach(function(x){ if(x && x.date) ds[String(x.date).slice(0,10)] = 1; });
+    var last = Object.keys(ds).sort().slice(-3);
+    out.push('— ' + p[1] + ': ' + a.length + ' اختبار، آخر تواريخ: ' + last.join(' ، ') + ' —');
+    var seen = {}; a.forEach(function(x){ if(x && x.date && String(x.date).slice(0,10) >= (last[0] || '') ){ var k = String(x.date).slice(0,10) + ' | ' + x.className + ' | فرع: ' + (x.branch || ''); if(!seen[k]){ seen[k] = 1; out.push(k); } } });
+  });
+  var sh = []; try{ sh = JSON.parse(localStorage.getItem('quran-sheikh:tested') || '[]'); }catch(e){}
+  out.push('— نسخة الشيخ: ' + (Array.isArray(sh) ? sh.length : 0) + ' —');
+  var ov = document.createElement('div'); ov.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:12px';
+  ov.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:520px;width:100%;max-height:85vh;overflow:auto;padding:12px;direction:rtl"><pre style="white-space:pre-wrap;font:12.5px/1.7 system-ui;margin:0 0 10px"></pre><button type="button" style="width:100%;padding:10px;border:0;border-radius:10px;background:#0F2440;color:#fff;font:inherit;font-weight:700">إغلاق</button></div>';
+  ov.querySelector('pre').textContent = out.join('\n');
+  ov.querySelector('button').onclick = function(){ ov.remove(); };
+  document.body.appendChild(ov);
+}
 function renderTodayBox(){
   var box = document.getElementById('todayBox'); if(!box) return;
   var classes = [];
   try{ var r = JSON.parse(localStorage.getItem(SCHED_KEY) || 'null'); if(r && Array.isArray(r.classes)) classes = r.classes.concat((Array.isArray(r.plan) ? r.plan : []).map(function(p){ return { branch:p.branch, teacher:p.teacher, name:p.name, day:null, dates:[p.date], planned:true }; })); }catch(e){}
   if(!classes.length){ box.innerHTML = ''; return; }
   var now = new Date(), base = new Date(now.getFullYear(), now.getMonth(), now.getDate()), labels = ['النهارده', 'بكرة', 'بعد بكرة'];
-  var h = '<div class="tb-h">📌 الاختبارات القادمة <span style="font-weight:400;color:#7C8A7E;">(دوسي للتفاصيل)</span></div>';
+  var h = '<div class="tb-h">📌 الاختبارات القادمة <span style="font-weight:400;color:#7C8A7E;">(دوسي للتفاصيل)</span> <a class="tb-dg" style="display:inline-block;margin-right:6px;padding:1px 9px;border-radius:10px;background:#EEE;color:#555;font-size:12px;font-weight:800;">🔍 تشخيص</a></div>';
   for(var i = 0; i < 3; i++){
     var d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i), key = swIso(d), wd = d.getDay();
     var tm = swTestedMap();
     var list = classes.filter(function(c){
       if(c.dates && c.dates.length) return c.dates.indexOf(key) !== -1;
       return c.day !== null && c.day !== undefined && c.day === wd;
-    }).filter(function(c){ return !swIsTested(tm, c, key); });
+    }).filter(function(c){ return !swIsTested(tm, c, key) && !swDismissed(c, 'd:' + key); });
     if(i === 0){ list = list.concat(swLate(classes, key, tm)); }
     else { list = list.concat(swLate(classes, swIso(base), tm).filter(function(c){ return c.lateTo === key; })); }
     h += '<div class="tb-d"><div class="tb-r">' + labels[i] + ' — ' + SW_WD[wd] + ' ' + swAd(d.getDate()) + ' ' + SW_MO[d.getMonth()] + '<span>' + (list.length ? swAd(list.length) + ' فصل' : '') + '</span></div>';
@@ -293,13 +315,14 @@ function renderTodayBox(){
       var brs = []; list.forEach(function(c){ if(brs.indexOf(c.branch) === -1) brs.push(c.branch); });
       brs.forEach(function(b){
         var by = {}, order = [];
-        list.filter(function(c){ return c.branch === b; }).forEach(function(c){ var k = c.teacher || 'بدون معلمة'; if(!by[k]){ by[k] = []; order.push(k); } var kk = c.late ? swDoneKey(c, c.late) : ''; if(kk) SW_REG[kk] = {c:c, last:c.late}; by[k].push({t: c.name + (c.test ? ' — ' + c.test : '') + swLateTag(c), k: kk}); });
+        list.filter(function(c){ return c.branch === b; }).forEach(function(c){ var k = c.teacher || 'بدون معلمة'; if(!by[k]){ by[k] = []; order.push(k); } var kk = c.late ? swDoneKey(c, c.late) : swDoneKey(c, 'd:' + key); if(kk) SW_REG[kk] = {c:c, last:(c.late || 'd:' + key)}; by[k].push({t: c.name + (c.test ? ' — ' + c.test : '') + swLateTag(c), k: kk}); });
         h += '<div class="tb-l" style="--c:' + (SW_BC[b] || '#0F2440') + '"><b>فرع ' + swEsc(b) + '</b>' + order.map(function(k){ return '<div class="tb-t">👩‍🏫 <b>' + swEsc(k) + ':</b> ' + by[k].map(function(x){ return swEsc(x.t) + (x.k ? ' <a class="tb-ok" data-sw="' + swEsc(x.k) + '">✓ اختبر</a>' : ''); }).join('، ') + '</div>'; }).join('') + '</div>';
       });
     }
     h += '</div>';
   }
   box.innerHTML = h;
+  var dg = box.querySelector('.tb-dg'); if(dg) dg.addEventListener('click', function(ev){ ev.stopPropagation(); swDiag(); });
   box.querySelectorAll('.tb-ok').forEach(function(a){ a.addEventListener('click', function(ev){ ev.stopPropagation(); var rg = SW_REG[a.getAttribute('data-sw')]; if(rg){ swDismiss(rg.c, rg.last); renderTodayBox(); } }); });
 }
 document.getElementById('todayBox').addEventListener('click', function(){ openApp('schedule'); });
@@ -398,7 +421,7 @@ function inflateRaw(src){
     var classes = [];
     try{ var r = JSON.parse(localStorage.getItem(SCHED_KEY) || 'null'); if(r && Array.isArray(r.classes)) classes = r.classes.concat((Array.isArray(r.plan) ? r.plan : []).map(function(p){ return { branch:p.branch, teacher:p.teacher, name:p.name, day:null, dates:[p.date] }; })); }catch(e){}
     var n = new Date(), d = new Date(n.getFullYear(), n.getMonth(), n.getDate() + off), key = swIso(d), wd = d.getDay();
-    var tm = swTestedMap(); return classes.filter(function(c){ if(c.dates && c.dates.length) return c.dates.indexOf(key) !== -1; return c.day !== null && c.day !== undefined && c.day === wd; }).filter(function(c){ return !swIsTested(tm, c, key); });
+    var tm = swTestedMap(); return classes.filter(function(c){ if(c.dates && c.dates.length) return c.dates.indexOf(key) !== -1; return c.day !== null && c.day !== undefined && c.day === wd; }).filter(function(c){ return !swIsTested(tm, c, key) && !swDismissed(c, 'd:' + key); });
   }
   function names(l){ return l.map(function(c){ return (c.teacher ? c.teacher + ' ← ' : '') + c.name; }).join('، '); }
   function notify(t, b){ try{ new Notification(t, { body: b }); }catch(e){} }
