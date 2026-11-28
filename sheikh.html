@@ -152,7 +152,7 @@ html.cr-zbig #clsRepOv .cr-acts button{flex:1 1 100% !important}
   <div id="pf" class="chips"></div>
   <div id="mchips" class="chips"></div>
   <div id="chips" class="chips"></div>
-  <div class="tools"><button id="crBtn" type="button" style="background:#0F2440;color:#F4EFDC;border-color:#0F2440">📊 تقرير إجمالي الفصول</button><button id="tcBtn" type="button">👩‍🏫 المحفظات</button><button id="trBtn" type="button">📚 التقارير</button><button id="xlBtn" type="button">⬇ تصدير Excel</button><button id="bkBtn" type="button">💾 نسخة احتياطية</button></div>
+  <div class="tools"><button id="crBtn" type="button" style="background:#0F2440;color:#F4EFDC;border-color:#0F2440">📊 تقرير إجمالي الفصول</button><button id="tcBtn" type="button">👩‍🏫 المحفظات</button><button id="trBtn" type="button">📚 التقارير</button><button id="ctBtn" type="button">🎓 الشهادات</button><button id="xlBtn" type="button">⬇ تصدير Excel</button><button id="bkBtn" type="button">💾 نسخة احتياطية</button></div>
   <div id="sum" class="sum"></div>
   <div id="list"></div>
 </main>
@@ -311,7 +311,7 @@ auth.onAuthStateChanged(u => {
       results = dedupe(canonClasses(list));
       render();
       if(window.__tcRefresh) window.__tcRefresh();
-      try{ if(window.__trRefresh) window.__trRefresh(); }catch(e){}
+      try{ if(window.__trRefresh) window.__trRefresh(); }catch(e){} try{ if(window.__ctRefresh) window.__ctRefresh(); }catch(e){}
       if(window.__crRedraw) window.__crRedraw();
       else if(first && window.openClassReport) window.openClassReport();
       if(first){ first = false; }
@@ -855,6 +855,7 @@ $('bkBtn').addEventListener('click', () => {
       const sv = [], sj = [], ss = [];
       g.rows.forEach(r => { const v = String(r.supervisorName || '').trim(); if(v && sv.indexOf(v) < 0) sv.push(v); if(!isS(r)){ const t = subject(r); if(t && sj.indexOf(t) < 0) sj.push(t); } else { (Array.isArray(r.questions) ? r.questions : []).forEach(q => { if(q && q.surah && ss.indexOf(q.surah) < 0) ss.push(q.surah); }); } });
       h += '<div class="cr-sec' + (o.pages && gi < gs.length - 1 ? ' pg' : '') + '"><h3>الفصل: ' + esc(g.name) +
+        (function(){ const pf = (g.rows.map(r => r.postponedFrom).filter(Boolean).sort()[0]) || ''; if(!/^\d{4}-\d{2}-\d{2}$/.test(pf)) return ''; const p = pf.split('-'), W = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'], dt = new Date(+p[0], +p[1]-1, +p[2]); return ' <span style="color:#A3312B">— ⏳ كان متأجل من ' + W[dt.getDay()] + ' ' + ad(+p[2]) + '/' + ad(+p[1]) + '</span>'; })() +
         (indOfClass(g.name) ? ' <span style="color:#5b3a9a">— فردي</span>' : '') +
         ' <span style="color:#8A6A20">— المحفظ/ة: ' + (sv.length ? esc(sv.join('، ').replace(/^\s*أ\s*[.\/]\s*/, '')) : 'غير محددة') + '</span>' +
         (sj.length ? ' <span style="color:#1d4f8a">— ' + esc(sj.join('، ')) + '</span>' : '') +
@@ -1679,6 +1680,355 @@ $('bkBtn').addEventListener('click', () => {
     window.__trRefresh = () => { if(document.getElementById('trOv')) draw(); };
     draw();
   }
+  /* ===== 🎓 شهادات اختبار الجزء (95 فأكتر): كل فصل لوحده، جاهزة للطباعة، وبتوصل لوحدها مع كل اختبار ===== */
+  const CERT = (function(){
+const SURAH_ORDER = [
+  'الفاتحة','البقرة','آل عمران','النساء','المائدة','الأنعام','الأعراف','الأنفال','التوبة','يونس',
+  'هود','يوسف','الرعد','إبراهيم','الحجر','النحل','الإسراء','الكهف','مريم','طه',
+  'الأنبياء','الحج','المؤمنون','النور','الفرقان','الشعراء','النمل','القصص','العنكبوت','الروم',
+  'لقمان','السجدة','الأحزاب','سبأ','فاطر','يس','الصافات','ص','الزمر','غافر',
+  'فصلت','الشورى','الزخرف','الدخان','الجاثية','الأحقاف','محمد','الفتح','الحجرات','ق',
+  'الذاريات','الطور','النجم','القمر','الرحمن','الواقعة','الحديد','المجادلة','الحشر','الممتحنة',
+  'الصف','الجمعة','المنافقون','التغابن','الطلاق','التحريم','الملك','القلم','الحاقة','المعارج',
+  'نوح','الجن','المزمل','المدثر','القيامة','الإنسان','المرسلات','النبأ','النازعات','عبس',
+  'التكوير','الانفطار','المطففين','الانشقاق','البروج','الطارق','الأعلى','الغاشية','الفجر','البلد',
+  'الشمس','الليل','الضحى','الشرح','التين','العلق','القدر','البينة','الزلزلة','العاديات',
+  'القارعة','التكاثر','العصر','الهمزة','الفيل','قريش','الماعون','الكوثر','الكافرون','النصر',
+  'المسد','الإخلاص','الفلق','الناس'
+];
+const QUARTER_DATA = {
+  1:[['الفاتحة',1],['البقرة',26],['البقرة',44],['البقرة',60]],
+  2:[['البقرة',75],['البقرة',92],['البقرة',106],['البقرة',124]],
+  3:[['البقرة',142],['البقرة',158],['البقرة',177],['البقرة',189]],
+  4:[['البقرة',203],['البقرة',219],['البقرة',233],['البقرة',243]],
+  5:[['البقرة',253],['البقرة',263],['البقرة',272],['البقرة',283]],
+  6:[['آل عمران',15],['آل عمران',33],['آل عمران',52],['آل عمران',75]],
+  7:[['آل عمران',93],['آل عمران',113],['آل عمران',133],['آل عمران',153]],
+  8:[['آل عمران',171],['آل عمران',186],['النساء',1],['النساء',12]],
+  9:[['النساء',24],['النساء',36],['النساء',58],['النساء',74]],
+  10:[['النساء',88],['النساء',100],['النساء',114],['النساء',135]],
+  11:[['النساء',148],['النساء',163],['المائدة',1],['المائدة',12]],
+  12:[['المائدة',27],['المائدة',41],['المائدة',51],['المائدة',67]],
+  13:[['المائدة',82],['المائدة',97],['المائدة',109],['الأنعام',13]],
+  14:[['الأنعام',36],['الأنعام',59],['الأنعام',74],['الأنعام',95]],
+  15:[['الأنعام',111],['الأنعام',127],['الأنعام',141],['الأنعام',151]],
+  16:[['الأعراف',1],['الأعراف',31],['الأعراف',47],['الأعراف',65]],
+  17:[['الأعراف',88],['الأعراف',117],['الأعراف',142],['الأعراف',156]],
+  18:[['الأعراف',171],['الأعراف',189],['الأنفال',1],['الأنفال',22]],
+  19:[['الأنفال',41],['الأنفال',61],['التوبة',1],['التوبة',19]],
+  20:[['التوبة',34],['التوبة',46],['التوبة',60],['التوبة',75]],
+  21:[['التوبة',93],['التوبة',111],['التوبة',122],['يونس',11]],
+  22:[['يونس',26],['يونس',53],['يونس',71],['يونس',90]],
+  23:[['هود',6],['هود',24],['هود',41],['هود',61]],
+  24:[['هود',84],['هود',108],['يوسف',7],['يوسف',30]],
+  25:[['يوسف',53],['يوسف',77],['يوسف',101],['الرعد',5]],
+  26:[['الرعد',19],['الرعد',35],['إبراهيم',10],['إبراهيم',28]],
+  27:[['الحجر',1],['الحجر',50],['النحل',1],['النحل',30]],
+  28:[['النحل',51],['النحل',75],['النحل',90],['النحل',111]],
+  29:[['الإسراء',1],['الإسراء',23],['الإسراء',50],['الإسراء',70]],
+  30:[['الإسراء',99],['الكهف',17],['الكهف',32],['الكهف',51]],
+  31:[['الكهف',75],['الكهف',99],['مريم',22],['مريم',59]],
+  32:[['طه',1],['طه',55],['طه',83],['طه',111]],
+  33:[['الأنبياء',1],['الأنبياء',29],['الأنبياء',51],['الأنبياء',83]],
+  34:[['الحج',1],['الحج',19],['الحج',38],['الحج',60]],
+  35:[['المؤمنون',1],['المؤمنون',36],['المؤمنون',75],['النور',1]],
+  36:[['النور',21],['النور',35],['النور',53],['الفرقان',1]],
+  37:[['الفرقان',21],['الفرقان',53],['الشعراء',1],['الشعراء',52]],
+  38:[['الشعراء',111],['الشعراء',181],['النمل',1],['النمل',27]],
+  39:[['النمل',56],['النمل',82],['القصص',12],['القصص',29]],
+  40:[['القصص',51],['القصص',76],['العنكبوت',1],['العنكبوت',26]],
+  41:[['العنكبوت',46],['الروم',1],['الروم',31],['الروم',54]],
+  42:[['لقمان',22],['السجدة',11],['الأحزاب',1],['الأحزاب',18]],
+  43:[['الأحزاب',31],['الأحزاب',51],['الأحزاب',60],['سبأ',10]],
+  44:[['سبأ',24],['سبأ',46],['فاطر',15],['فاطر',41]],
+  45:[['يس',28],['يس',60],['الصافات',22],['الصافات',83]],
+  46:[['الصافات',145],['ص',21],['ص',52],['الزمر',8]],
+  47:[['الزمر',32],['الزمر',53],['غافر',1],['غافر',21]],
+  48:[['غافر',41],['غافر',66],['فصلت',9],['فصلت',25]],
+  49:[['فصلت',47],['الشورى',13],['الشورى',27],['الشورى',51]],
+  50:[['الزخرف',24],['الزخرف',57],['الدخان',17],['الجاثية',12]],
+  51:[['الأحقاف',1],['الأحقاف',21],['محمد',10],['محمد',33]],
+  52:[['الفتح',18],['الحجرات',1],['الحجرات',14],['ق',27]],
+  53:[['الذاريات',31],['الطور',24],['النجم',26],['القمر',9]],
+  54:[['الرحمن',1],['الواقعة',1],['الواقعة',75],['الحديد',16]],
+  55:[['المجادلة',1],['المجادلة',14],['الحشر',11],['الممتحنة',7]],
+  56:[['الجمعة',1],['المنافقون',4],['الطلاق',1],['التحريم',1]],
+  57:[['الملك',1],['القلم',1],['الحاقة',1],['المعارج',19]],
+  58:[['الجن',1],['المزمل',20],['القيامة',1],['الإنسان',19]],
+  59:[['النبأ',1],['عبس',1],['الانفطار',1],['الانشقاق',1]],
+  60:[['الأعلى',1],['البلد',1],['الشرح',1],['العاديات',1]]
+};
+const JUZ_NAME_TO_NUMBER = {
+  'الجزء الأول':1, 'الجزء الثاني':2, 'الجزء الثالث':3, 'الجزء الرابع':4, 'الجزء الخامس':5,
+  'الجزء السادس':6, 'الجزء السابع':7, 'الجزء الثامن':8, 'الجزء التاسع':9, 'الجزء العاشر':10,
+  'الجزء الحادي عشر':11, 'الجزء الثاني عشر':12, 'الجزء الثالث عشر':13, 'الجزء الرابع عشر':14, 'الجزء الخامس عشر':15,
+  'الجزء السادس عشر':16, 'الجزء السابع عشر':17, 'الجزء الثامن عشر':18, 'الجزء التاسع عشر':19, 'الجزء العشرون':20,
+  'الجزء الحادي والعشرين':21, 'الجزء الثاني والعشرين':22, 'الجزء الثالث والعشرين':23, 'الجزء الرابع والعشرين':24, 'الجزء الخامس والعشرين':25,
+  'الجزء السادس والعشرين':26, 'الجزء السابع والعشرين':27, 'جزء قد سمع':28, 'جزء تبارك':29, 'جزء عم':30
+};
+function computeJuzRange(juzNum){
+  const startEntry = QUARTER_DATA[juzNum*2-1][0];
+  const start = startEntry[0];
+  let end;
+  if(juzNum>=30){
+    end = SURAH_ORDER[SURAH_ORDER.length-1]; // الناس
+  }else{
+    const nextEntry = QUARTER_DATA[juzNum*2+1][0];
+    if(nextEntry[1]===1){
+      // الجزء الجاي بيبدأ من أول السورة، يبقى الجزء الحالي بينتهي بالسورة اللي قبلها
+      const idx = SURAH_ORDER.indexOf(nextEntry[0]);
+      end = idx>0 ? SURAH_ORDER[idx-1] : nextEntry[0];
+    }else{
+      // الجزء الجاي بيبدأ في نص السورة، يبقى الجزء الحالي بينتهي في نفس السورة
+      end = nextEntry[0];
+    }
+  }
+  return {start, end};
+}
+function cntTxt(n){n=+n||0;return n===1?'خطأ واحد':n===2?'خطآن':n<=10?n+' أخطاء':n+' خطأً'}
+function certOK(r){var g=+r.grade;return String(r.grade==null?'':r.grade).trim()!==''&&!isNaN(g)&&g>=95&&g<=100}
+function qWords(q){var w=q&&q.words;if(Array.isArray(w))w=w.join('، ');return String(w||'').trim()}
+function testLabel(t){try{var s=document.getElementById('testType');if(s)for(var i=0;i<s.options.length;i++)if(s.options[i].value===t)return s.options[i].textContent.trim()}catch(e){}return t}
+function juzCnt(n){return n===1?'جزء واحد':n===2?'جزءان':n<=10?n+' أجزاء':n+' جزءًا'}
+var JUZ_ORD=['','الأول','الثاني','الثالث','الرابع','الخامس','السادس','السابع','الثامن','التاسع','العاشر','الحادي عشر','الثاني عشر','الثالث عشر','الرابع عشر','الخامس عشر','السادس عشر','السابع عشر','الثامن عشر','التاسع عشر','العشرون','الحادي والعشرون','الثاني والعشرون','الثالث والعشرون','الرابع والعشرون','الخامس والعشرون','السادس والعشرون','السابع والعشرون','الثامن والعشرون','التاسع والعشرون','الثلاثون'];
+var JUZ_SUB={1:'جزء عم',2:'جزء تبارك',3:'جزء قد سمع'};
+function juzOfSelected(r){var s={},j;try{j=JUZ_NAME_TO_NUMBER[r.testType]}catch(e){}
+ if(j)s[j]=1;if(+r.hizb)s[Math.ceil(+r.hizb/2)]=1;if(+r.multiJuzStart)s[+r.multiJuzStart]=1;
+ return Object.keys(s).map(Number).filter(function(j){return j>=1&&j<=30})}
+function juzFromBottom(r){var s={},j=0;try{j=+r.juzGrading||0}catch(e){}
+ if(j>=1&&j<=30)s[31-j]=1;
+ else{var a=[];try{a=juzOfSelected(r)}catch(e){}a.forEach(function(x){if(x>=1&&x<=30)s[31-x]=1})}
+ return Object.keys(s).map(Number).sort(function(a,b){return a-b})}
+function juzOneTxt(b){return 'الجزء '+JUZ_ORD[b]}
+function juzKind(r,pre){var b=juzFromBottom(r);if(!b.length)return null;
+ if(b.length===1)return 'اختبار على '+(pre||'')+juzOneTxt(b[0]);
+ return 'اختبار على الأجزاء: '+b.map(function(x){return JUZ_ORD[x]}).join('، ')}
+function examKind(r){var E='جزء';if(E==='سورة')return 'اختبار على سورة';var t=String(r.testType||'').trim();
+ try{var jn0=JUZ_NAME_TO_NUMBER[t];if(jn0)return 'اختبار على '+juzOneTxt(31-jn0)}catch(e){}
+ if(t==='اختبار جزء'){var k0=juzKind(r,'');if(k0)return k0}
+ if(t==='اختبار نصف جزء'){var k1=juzKind(r,'نصف ');if(k1)return k1}
+ if(t==='اختبار ربع'){var k2=juzKind(r,'ربع من ');if(k2)return k2}
+ if(/^اختبار /.test(t))return t==='اختبار فصل'?t:'اختبار على '+t.replace(/^اختبار /,'');
+ if(/^من /.test(t))return 'اختبار على الأجزاء '+t;
+ if(/جزء|الجزء/.test(t))return 'اختبار على '+testLabel(t).replace(/\\s+—\\s+.*$/,'');
+ var k3=juzKind(r,'');return k3||'اختبار على جزء'}
+function examParts(r){if('جزء'==='سورة')return '';var t=String(r.testType||'').trim(),jn=+r.multiJuzStart||0;
+ try{if(!jn&&typeof JUZ_NAME_TO_NUMBER!=='undefined')jn=JUZ_NAME_TO_NUMBER[t]||0;
+ if(jn&&typeof computeJuzRange==='function'){var rg=computeJuzRange(jn),cnt=31-jn;return 'الأجزاء المحفوظة: '+juzCnt(cnt)+(rg.start===rg.end?' ('+rg.start+')':' — من '+rg.start+' إلى الناس')}}catch(e){}
+ if(/^من /.test(t))return 'الأجزاء المحفوظة: '+t;var m=String(r.multiJuzLabel||'').trim();return m?'الأجزاء المحفوظة: '+m:''}
+function dedic(r){var f=r.gender==='أنثى',h=0,k=String(r.student||'')+String(r.date||'');for(var i=0;i<k.length;i++)h+=k.charCodeAt(i);
+ var V=[
+ 'إهداءٌ من القلب إلى '+(f?'بطلتنا المتألّقة التي أتقنت':'بطلنا المتألّق الذي أتقن')+' كتاب الله حفظًا وتلاوةً. نسأل الله أن '+(f?'يجعلها':'يجعله')+' من أهل القرآن الذين هم أهل الله وخاصّته.',
+ 'قال ﷺ: «خيركم من تعلّم القرآن وعلّمه». فهنيئًا '+(f?'لكِ':'لكَ')+' هذا الفضل، وبارك الله في '+(f?'حفظكِ':'حفظكَ')+' وزادك علمًا ونورًا وتوفيقًا.',
+ 'ثمرةُ جهدٍ وصبرٍ ومراجعةٍ متواصلة، ونتيجةُ قلبٍ تعلّق بالقرآن. نسأل الله أن يرفع قدر'+(f?'ها':'ه')+' في الدنيا والآخرة، ويجعل القرآن شفيعًا '+(f?'لها':'له')+'.'];
+ return V[h%3]}
+function wrapLines(x,s,w){var a=s.split(' '),L=[],c='';a.forEach(function(wd){var t=c?c+' '+wd:wd;if(x.measureText(t).width>w&&c){L.push(c);c=wd}else c=t});if(c)L.push(c);return L}
+function drawCert(r){var c=document.createElement('canvas');c.width=1080;c.height=1350;var x=c.getContext('2d');x.direction='rtl';x.textAlign='center';
+ var F='Cairo,Tajawal,system-ui,sans-serif',f=r.gender==='أنثى',g=+r.grade||0,GOLD='#C7963E',CREAM='#F4EFDC',SC='جزء'==='سورة'?10:100,KIND=examKind(r),PARTS=examParts(r),off=PARTS?40:0;
+ var gd=x.createLinearGradient(0,0,0,1350);gd.addColorStop(0,'#0F2440');gd.addColorStop(1,'#1E3F66');x.fillStyle=gd;x.fillRect(0,0,1080,1350);
+ x.strokeStyle=GOLD;x.lineWidth=8;x.strokeRect(36,36,1008,1278);x.lineWidth=2;x.strokeRect(58,58,964,1234);
+ function t(s,y,sz,col,w){x.textAlign='center';x.font=(w||'700')+' '+sz+'px '+F;x.fillStyle=col;x.fillText(s,540,y)}
+ function fit(s,y,sz,col,w,mx){x.font=(w||'700')+' '+sz+'px '+F;while(x.measureText(s).width>mx&&sz>22){sz-=2;x.font=(w||'700')+' '+sz+'px '+F}t(s,y,sz,col,w)}
+ [[100,110],[980,110],[100,1250],[980,1250]].forEach(function(p){x.textAlign='center';x.font='700 44px '+F;x.fillStyle=GOLD;x.fillText('✦',p[0],p[1])});
+ fit('مركز الأمين الثقافي التربوي',84,36,'#E8C46B','800',720);t('لتحفيظ القرآن الكريم',120,27,GOLD,'700');t('بسم الله الرحمن الرحيم',156,24,CREAM,'600');
+ t(SC===10&&g>=10?'شهادة تفوّق':'شهادة تقدير',235,98,CREAM,'800');
+ x.strokeStyle=GOLD;x.lineWidth=2;x.beginPath();x.moveTo(250,272);x.lineTo(500,272);x.moveTo(580,272);x.lineTo(830,272);x.stroke();t('✦',284,30,GOLD);
+ t('تُمنح '+(f?'للطالبة المتميزة':'للطالب المتميز'),330,40,GOLD);
+ var n=String(r.student||''),sz=88;x.font='800 '+sz+'px '+F;while(x.measureText(n).width>900&&sz>40){sz-=4;x.font='800 '+sz+'px '+F}t(n,418,sz,'#fff','800');
+ t('✦  ما شاء الله تبارك الله  ✦',478,42,GOLD,'800');
+ fit('على '+(f?'اجتيازها':'اجتيازه')+' «'+KIND+'» بتفوّقٍ وإتقان',526,34,CREAM,'700',880);
+ 
+ if(PARTS)fit(PARTS,566,30,GOLD,'800',880);
+ var ptxt=g>=SC?'الدرجة الكاملة  '+SC+' من '+SC:'الدرجة  '+g+' من '+SC;x.font='800 34px '+F;var pw=x.measureText(ptxt).width+90,py=556+off;
+ x.fillStyle=GOLD;x.beginPath();x.moveTo(540-pw/2+26,py);x.lineTo(540+pw/2-26,py);x.arc(540+pw/2-26,py+26,26,-1.5708,1.5708);x.lineTo(540-pw/2+26,py+52);x.arc(540-pw/2+26,py+26,26,1.5708,4.7124);x.fill();
+ t(ptxt,py+37,34,'#0F2440','800');
+ x.font='600 32px '+F;var DL=wrapLines(x,dedic(r),820),dy=636+off,dh=DL.length*48+36;
+ x.fillStyle='rgba(255,255,255,0.07)';x.fillRect(110,dy,860,dh);x.strokeStyle='rgba(199,150,62,0.6)';x.lineWidth=1.5;x.strokeRect(110,dy,860,dh);
+ DL.forEach(function(l,i){t(l,dy+46+i*48,32,CREAM,'600')});
+ var hy=dy+dh+52;t('الأسئلة التي '+(f?'سُئلت':'سُئل')+' فيها',hy,36,GOLD,'800');
+ var qs=(r.questions||[]).filter(function(q){return q&&q.surah}).slice(0,7),n2=qs.length,top=hy+20,avail=1210-top,rh=n2<=2?96:n2<=3?80:56,ex=30;
+ var hasW=qs.map(function(q){return (+q.mistakes||0)>0&&qWords(q)!==''});var need=n2*rh+hasW.filter(Boolean).length*ex;var showW=need<=avail;
+ if(!showW){need=n2*rh;if(need>avail)rh=Math.floor(avail/Math.max(n2,1))}
+ var yy=top;
+ qs.forEach(function(q,i){var m=+q.mistakes||0,name=q.surah,st=m?cntTxt(m):'',sep=' — ',fs=Math.min(rh>=80?46:36,Math.floor(rh*0.58)),h=rh+(showW&&hasW[i]?ex:0);
+  x.fillStyle='rgba(255,255,255,0.05)';x.fillRect(120,yy,840,h-8);
+  var cr=Math.min(17,Math.floor((rh-8)/2)-2),cy=yy+Math.round((rh-8)/2);x.fillStyle=GOLD;x.beginPath();x.arc(925,cy,cr,0,6.2832);x.fill();
+  x.textAlign='center';x.font='800 '+Math.max(16,cr+1)+'px '+F;x.fillStyle='#0F2440';x.fillText(String(i+1),925,cy+Math.round(cr*0.38));
+  var w1,w2;while(true){x.font='700 '+fs+'px '+F;w1=x.measureText(name).width;x.font='800 '+fs+'px '+F;w2=st?x.measureText(sep+st).width:0;if(w1+w2<=740||fs<=20)break;fs-=2}
+  var by=yy+Math.round((rh-8)/2+fs*0.34),sx=540+(w1+w2)/2;x.textAlign='right';
+  x.font='700 '+fs+'px '+F;x.fillStyle='#E8D9A8';x.fillText(name,sx,by);
+  if(st){x.font='800 '+fs+'px '+F;x.fillStyle='#FF9E8F';x.fillText(sep+st,sx-w1,by)}
+  x.textAlign='center';
+  if(showW&&hasW[i]){var wt='الكلمات: '+qWords(q);if(wt.length>75)wt=wt.slice(0,72)+'…';t(wt,yy+rh+2,24,'rgba(244,239,220,0.85)','600')}
+  yy+=h});
+ if(n2<=3)t('﴿ وَرَتِّلِ ٱلْقُرْءَانَ تَرْتِيلًا ﴾',1160,40,'#E8D9A8','600');
+ t([r.date,r.className].filter(Boolean).join('  •  '),1244,30,CREAM,'600');if(r.supervisorName)t('المحفظ/ة: '+r.supervisorName,1280,26,GOLD,'600');
+ return c}
+
+    return {draw: drawCert, ok: certOK};
+  })();
+  const CT = {mon: ''};
+  const CT_PAPERS = {A6: {w: 105, h: 148, t: 'A6 (صغير جدًا)'}, A5: {w: 148, h: 210, t: 'A5 (الورق الصغير)'}, A4: {w: 210, h: 297, t: 'A4 (الورق الكبير)'}};
+  const ctPaper = () => { let v = 'A5'; try{ v = localStorage.getItem('sk:ctPaper') || 'A5'; }catch(e){} return CT_PAPERS[v] ? v : 'A5'; };
+
+  /* الشهادات اللي اتطبعت بتتعلّم عشان الجديدة بس هي اللي تظهر في الشريط اللي فوق */
+  const CT_PK = 'sk:ctPrinted';
+  let CT_P = {}; try{ CT_P = JSON.parse(localStorage.getItem(CT_PK) || '{}') || {}; }catch(e){}
+  const ctDone = r => !!CT_P[String(r.id || '')];
+  function ctMark(list){ list.forEach(r => { CT_P[String(r.id || '')] = 1; }); try{ localStorage.setItem(CT_PK, JSON.stringify(CT_P)); }catch(e){} }
+  const ctTime = r => { const t = Number(r.ts); if(t > 1e12) return t; const d = new Date(String(dOf(r) || '').slice(0, 10) + 'T12:00:00'); return isNaN(d) ? 0 : d.getTime(); };
+  const ctRecent = r => Date.now() - ctTime(r) <= 3 * 864e5;
+  /* شريط فوق الصفحة: أي فصل اختبر جديد (آخر 3 أيام) وشهاداته لسه ماتطبعتش، زرار طباعة جاهز له */
+  function ctBanner(){
+    const m = document.querySelector('main'); if(!m) return;
+    let el = document.getElementById('ctBanner');
+    if(!el){ el = document.createElement('div'); el.id = 'ctBanner'; m.insertBefore(el, m.firstChild); }
+    const G = {}; ctRows().filter(r => !ctDone(r) && ctRecent(r)).forEach(r => { const k = String(r.className || '').trim() || 'بدون فصل'; (G[k] = G[k] || []).push(r); });
+    const names = Object.keys(G).sort((a, b) => Math.max.apply(null, G[b].map(ctTime)) - Math.max.apply(null, G[a].map(ctTime)));
+    if(!names.length){ el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.cssText = 'display:block;background:#fff8e6;border:2px solid #C7963E;border-radius:14px;padding:10px;margin:0 0 10px;direction:rtl';
+    el.innerHTML = '<div style="font-weight:800;color:#0F2440;margin-bottom:8px">🎓 شهادات جاهزة للطباعة</div>' +
+      names.map((n, i) => '<button type="button" data-bn="' + i + '" style="display:block;width:100%;font:inherit;font-weight:800;font-size:15px;border:0;border-radius:10px;padding:11px;margin-bottom:6px;background:#0F2440;color:#F4EFDC;cursor:pointer">🖨️ اطبعي شهادات ' + esc(n) + ' (' + G[n].length + ')</button>').join('') +
+      '<button type="button" id="ctBnAll" style="font:inherit;font-weight:700;font-size:13px;border:0;background:none;color:#8a5a00;text-decoration:underline;cursor:pointer;padding:4px">فتح كل الشهادات</button>';
+    el.querySelectorAll('[data-bn]').forEach(b => { b.onclick = () => ctPrint(G[names[+b.dataset.bn]]); });
+    el.querySelector('#ctBnAll').onclick = () => openCerts();
+  }
+  const ctGrade = r => { const s = String(r.grade == null ? '' : r.grade).replace(/[٠-٩]/g, c => c.charCodeAt(0) - 0x0660).replace(/[۰-۹]/g, c => c.charCodeAt(0) - 0x06F0).replace(/٫/g, '.').trim(); const m = s.match(/\d+(\.\d+)?/); return m ? parseFloat(m[0]) : NaN; };
+  const ctRows = () => results.filter(r => valid(r) && kindOf(r) === 'j').map(r => { const g = ctGrade(r); return (g >= 95 && g <= 100) ? Object.assign({}, r, {grade: g}) : null; }).filter(Boolean);
+  /* الفصول اللي اختبرت في الفترة دي ومفيهاش شهادات، مع السبب */
+  function ctMissHtml(){
+    const inMon = r => CT.mon === 'all' || mnOf(r) === CT.mon, have = {};
+    ctRows().filter(inMon).forEach(r => { have[String(r.className || '').trim()] = 1; });
+    const M = {};
+    results.filter(r => valid(r) && inMon(r)).forEach(r => {
+      const k = String(r.className || '').trim(); if(!k || have[k]) return;
+      const o = M[k] = M[k] || {n: 0, best: -1, sur: 0, bad: 0}; o.n++;
+      if(kindOf(r) === 's') o.sur++;
+      const g = ctGrade(r); if(isNaN(g)) o.bad++; else if(g > o.best) o.best = g;
+    });
+    const ks = Object.keys(M).sort((a, b) => a.localeCompare(b, 'ar')); if(!ks.length) return '';
+    return '<div style="border:1px solid #e0a3a3;background:#fdf2f2;border-radius:12px;padding:10px;margin:6px 0 12px"><div style="font-weight:800;color:#b02a2a;margin-bottom:6px">⚠️ فصول اختبرت في الفترة دي ومفيهاش شهادات</div>' +
+      ks.map(k => { const o = M[k]; let why;
+        if(o.sur === o.n) why = 'اختبار على سورة (الشهادات هنا لاختبار الجزء بس)';
+        else if(o.best < 0) why = 'الدرجة مش رقم مفهوم (' + o.bad + ')';
+        else if(o.best > 100) why = 'أعلى درجة ' + o.best + ' أكبر من 100';
+        else why = 'أعلى درجة ' + o.best + ' (الشهادة من 95 لـ 100)' + (o.sur ? ' — ' + o.sur + ' اختبار سورة' : '');
+        return '<div style="font-size:14px;margin-bottom:4px"><b>' + esc(k) + '</b> — ' + o.n + ' اختبار: ' + esc(why) + '</div>'; }).join('') + '</div>';
+  }
+  const ctNow = () => { const n = new Date(); return n.getFullYear() + '-' + p2(n.getMonth() + 1); };
+  function ctGroups(){
+    const G = {};
+    ctRows().filter(r => CT.mon === 'all' || mnOf(r) === CT.mon).forEach(r => { const k = String(r.className || '').trim() || 'بدون فصل'; (G[k] = G[k] || []).push(r); });
+    Object.keys(G).forEach(k => G[k].sort((a, b) => String(a.student).localeCompare(String(b.student), 'ar') || String(a.date).localeCompare(String(b.date))));
+    return G;
+  }
+  let CT_T = 0;
+  const ctPrinting = () => document.documentElement.classList.contains('ct-printing');
+  function ctClean(){
+    document.documentElement.classList.remove('ct-printing');
+    const a = document.getElementById('ctPrintArea'); if(a) a.remove();
+  }
+  /* بيجهّز ورقة الطباعة: شهادة في كل صفحة على مقاس الورق المختار، وكل حاجة تانية في الصفحة بتتخبّى وقت الطباعة */
+  function ctSetup(list){
+    const PP = CT_PAPERS[ctPaper()];
+    const oc = document.getElementById('ctPrintCss'); if(oc) oc.remove();
+    const st = document.createElement('style'); st.id = 'ctPrintCss';
+    st.textContent = '#ctPrintArea{display:none}@media print{@page{size:' + PP.w + 'mm ' + PP.h + 'mm;margin:0}html.ct-printing body>*:not(#ctPrintArea){display:none!important}html.ct-printing>*:not(head):not(body){display:none!important}html.ct-printing #ctPrintArea{display:block!important}#ctPrintArea .pg{width:' + PP.w + 'mm;height:' + PP.h + 'mm;background:linear-gradient(#0F2440 50%,#1E3F66 50%);display:flex;align-items:center;justify-content:center;overflow:hidden;page-break-after:always;break-after:page}#ctPrintArea .pg:last-child{page-break-after:auto;break-after:auto}#ctPrintArea .pg canvas{width:100%;height:auto;display:block}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}html.ct-printing,html.ct-printing body{margin:0!important;padding:0!important;background:#fff!important}}';
+    document.head.appendChild(st);
+    const old = document.getElementById('ctPrintArea'); if(old) old.remove();
+    const area = document.createElement('div'); area.id = 'ctPrintArea';
+    list.forEach(r => { const pg = document.createElement('div'); pg.className = 'pg'; pg.appendChild(CERT.draw(r)); area.appendChild(pg); });
+    document.body.appendChild(area);
+    document.documentElement.classList.add('ct-printing'); CT_T = Date.now();
+    ctMark(list);
+  }
+  function ctPrint(list){
+    if(!list || !list.length) return;
+    try{ ctSetup(list); setTimeout(() => { try{ window.print(); }catch(e){ ctClean(); } }, 150); }
+    catch(e){ ctClean(); alert('حصلت مشكلة وإحنا بنجهّز الشهادات للطباعة'); }
+  }
+  /* Ctrl+P على الكمبيوتر وشاشة الشهادات مفتوحة: بيطبع شهادات الفصل المختار كلها مرة واحدة */
+  window.addEventListener('beforeprint', () => {
+    if(ctPrinting()) return;
+    const L = window.__ctShown; if(!document.getElementById('ctOv') || !L || !L.length) return;
+    try{ ctSetup(L); }catch(e){ ctClean(); }
+  });
+  window.addEventListener('afterprint', () => {
+    if(!ctPrinting()) return;
+    ctClean(); try{ ctBanner(); if(window.__ctDraw) window.__ctDraw(); }catch(e){}
+  });
+  document.addEventListener('pointerdown', () => { if(ctPrinting() && Date.now() - CT_T > 4000) ctClean(); }, true);
+  function ctShare(r){
+    try{
+      CERT.draw(r).toBlob(b => {
+        if(!b) return;
+        const f = new File([b], 'شهادة-' + String(r.student || '').replace(/\s+/g, '-') + '.jpg', {type: 'image/jpeg'});
+        if(navigator.canShare && navigator.canShare({files: [f]})){ navigator.share({files: [f], title: 'شهادة تقدير'}).catch(() => {}); }
+        else { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); }
+      }, 'image/jpeg', 0.93);
+    }catch(e){ alert('حصلت مشكلة في تجهيز الصورة'); }
+  }
+  function openCerts(){
+    const old = document.getElementById('ctOv'); if(old){ if(window.__ctCloser) window.__ctCloser(); else old.remove(); }
+    if(!CT.mon) CT.mon = ctNow();
+    if(!document.getElementById('ctCss')){
+      const st = document.createElement('style'); st.id = 'ctCss';
+      st.textContent = '#ctOv{position:fixed;inset:0;z-index:2147483646;background:#1b2d4a;overflow:auto;padding:10px;direction:rtl;font-family:Cairo,Tahoma,Arial,sans-serif}#ctOv .ct-box{background:#fff;color:#111;max-width:820px;margin:0 auto;border-radius:14px;padding:14px;box-sizing:border-box}#ctOv h2{margin:0 0 4px;font-size:20px;color:#0F2440}#ctOv .ct-sub{color:#666;font-size:13px;margin-bottom:10px}#ctOv select{width:100%;font:inherit;font-size:15px;padding:10px;border:1px solid #C7963E;border-radius:10px;margin-bottom:10px;background:#fff}#ctOv .ct-c{border:1px solid #C7963E;border-radius:12px;padding:10px;margin-bottom:12px;background:#fbf8ef}#ctOv .ct-h{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;color:#0F2440;font-size:17px}#ctOv .ct-h small{color:#666;font-weight:600}#ctOv .ct-s{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;margin-bottom:6px;border:1px solid #e4dcc3;border-radius:10px;background:#fff;font-size:15px}#ctOv .ct-s small{color:#1a7a3c;font-weight:800}#ctOv .ct-b{font:inherit;font-weight:800;border:0;border-radius:10px;padding:9px 14px;cursor:pointer;background:#eee;color:#111}#ctOv .ct-g{background:#0F2440;color:#F4EFDC}#ctOv .ct-m{padding:6px 10px;margin-right:4px;background:#C7963E;color:#0F2440}#ctOv .ct-empty{text-align:center;color:#666;padding:26px 8px}';
+      document.head.appendChild(st);
+    }
+    const ov = document.createElement('div'); ov.id = 'ctOv';
+    const box = document.createElement('div'); box.className = 'ct-box'; ov.appendChild(box);
+    const close = overlayBack(() => { ov.remove(); window.__ctCloser = null; window.__ctDraw = null; window.__ctShown = null; }); window.__ctCloser = close;
+    function draw(){
+      const G = ctGroups(), allNames = Object.keys(G).sort((a, b) => Math.max.apply(null, G[b].map(ctTime)) - Math.max.apply(null, G[a].map(ctTime)) || a.localeCompare(b, 'ar'));
+      if(CT.cls && allNames.indexOf(CT.cls) < 0) CT.cls = '';
+      const names = allNames.filter(n => !CT.cls || n === CT.cls), flat = [];
+      names.forEach(n => G[n].forEach(r => flat.push(r)));
+      window.__ctShown = flat;
+      const opts = mnList(ctRows()).slice().reverse(); if(CT.mon !== 'all' && opts.indexOf(CT.mon) < 0) opts.unshift(CT.mon);
+      box.innerHTML = TOPBTN('ctX') + '<h2>🎓 شهادات اختبار الجزء</h2><div class="ct-sub">الطلاب اللي جابوا ٩٥ فأكتر في اختبار على جزء، كل فصل لوحده. اختاري مقاس الورق من القايمة تحت (الافتراضي A5 الورق الصغير) والشهادة بتملى الورقة. على الكمبيوتر: اختاري الفصل واضغطي Ctrl+P ثم Print، وتتطبع كل شهادات الفصل مرة واحدة. وأي فصل يختبر بتوصل شهاداته هنا لوحدها.</div>' +
+        '<select id="ctM"><option value="all"' + (CT.mon === 'all' ? ' selected' : '') + '>🗓️ كل الشهور</option>' + opts.map(m => '<option value="' + m + '"' + (m === CT.mon ? ' selected' : '') + '>' + esc(mnFull(m)) + '</option>').join('') + '</select>' +
+        '<select id="ctP">' + Object.keys(CT_PAPERS).map(k => '<option value="' + k + '"' + (k === ctPaper() ? ' selected' : '') + '>🧾 مقاس الورق: ' + CT_PAPERS[k].t + '</option>').join('') + '</select>' +
+        '<select id="ctC"><option value="">📚 كل الفصول</option>' + allNames.map((n, i) => '<option value="' + i + '"' + (n === CT.cls ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '</select>' +
+        (names.length ? names.map((n, ci) => { const rs = G[n], sup = String(rs[0].supervisorName || '').trim();
+          return '<div class="ct-c"><div class="ct-h"><b>' + esc(n) + (rs.some(r => !ctDone(r)) ? ' 🆕' : ' <span style="color:#1a7a3c;font-size:13px">✓ اتطبعت</span>') + '</b><small>' + rs.length + ' شهادة' + (sup ? ' — ' + esc(sup) : '') + '</small></div>' +
+            '<button type="button" class="ct-b ct-g" data-c="' + ci + '" style="width:100%;margin-bottom:8px;padding:11px;font-size:15px">🖨️ اطبعي شهادات ' + esc(n) + ' (' + rs.length + ')</button>' +
+            rs.map(r => '<div class="ct-s"><span>' + esc(r.student) + ' <small>(' + esc(r.grade) + ')</small></span><span><button type="button" class="ct-b ct-m" data-p="' + flat.indexOf(r) + '">🖨️</button><button type="button" class="ct-b ct-m" data-s="' + flat.indexOf(r) + '">📤</button></span></div>').join('') +
+            '</div>'; }).join('')
+          : '<div class="ct-empty">مفيش شهادات في الفترة دي. اختاري شهر تاني أو «كل الشهور».</div>') +
+        ctMissHtml() + '<button type="button" class="ct-b" id="ctClose" style="margin-top:6px">إغلاق</button>';
+      box.querySelector('#ctM').onchange = e => { CT.mon = e.target.value; draw(); };
+      box.querySelector('#ctC').onchange = e => { CT.cls = e.target.value === '' ? '' : allNames[+e.target.value]; draw(); };
+      box.querySelector('#ctP').onchange = e => { try{ localStorage.setItem('sk:ctPaper', e.target.value); }catch(_){} };
+      const all = box.querySelector('#ctAll'); if(all) all.onclick = () => ctPrint(flat);
+      box.querySelectorAll('[data-c]').forEach(b => { b.onclick = () => ctPrint(G[names[+b.dataset.c]]); });
+      box.querySelectorAll('[data-p]').forEach(b => { b.onclick = () => ctPrint([flat[+b.dataset.p]]); });
+      box.querySelectorAll('[data-s]').forEach(b => { b.onclick = () => ctShare(flat[+b.dataset.s]); });
+      box.querySelector('#ctX').onclick = close; box.querySelector('#ctClose').onclick = close;
+    }
+    window.__ctDraw = draw;
+    document.body.appendChild(ov);
+    draw();
+  }
+
+  /* بنحفظ نسخة مصغّرة من اختبارات كل المختبِرات على الجهاز، عشان «الاختبارات القادمة» في القائمة الرئيسية تشيل الفصل اللي اختبر حتى لو اتسجل عند محفظة تانية */
+  function ctCacheTested(){
+    try{
+      const norm = x => String(x || '').replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\([^)]*\)/g, '').replace(/^\s*فصل\s+/, '').replace(/\s+/g, ' ').trim();
+      const lim = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10), arr = [];
+      results.forEach(r => { if(!r || !r.className || !r.date || !valid(r)) return; const d = String(r.date).slice(0, 10); if(d < lim) return; arr.push({d: d, n: norm(r.className), b: r.branch || '', k: kindOf(r) === 's' ? 'surah' : 'juz'}); });
+      localStorage.setItem('quran-sheikh:tested', JSON.stringify(arr));
+    }catch(e){}
+  }
+  window.__ctRefresh = () => {
+    try{ ctCacheTested(); }catch(e){}
+    try{ const b = $('ctBtn'); if(b){ const n = ctRows().filter(r => mnOf(r) === ctNow()).length; b.textContent = '🎓 الشهادات' + (n ? ' (' + n + ')' : ''); } }catch(e){}
+    try{ ctBanner(); }catch(e){}
+    try{ if(document.getElementById('ctOv') && window.__ctDraw) window.__ctDraw(); }catch(e){}
+  };
+  $('ctBtn').addEventListener('click', openCerts);
+  window.__ctRefresh();
+
   $('trBtn').addEventListener('click', openReports);
   window.openClassReport = openReport;
   $('crBtn').addEventListener('click', openReport);
